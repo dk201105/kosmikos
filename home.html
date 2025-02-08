@@ -1,13 +1,10 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <link rel="stylesheet" href="style_home.css">
-    <title>
-        Home - Kosmikos
-    </title>
-<script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=Rlascbe2j7S0K_P0vPkb7NN4fRBblcpoLbiftTx8IbcFVuMsOpH1WLDZxnvioxY1_K6oi8I8mmcDCHNXezTBfR0iWkiuSsJZ5zSsF0EtB97-D5_GWbUmbqkAKCC32kzPQIQCtFQnkGs2OJ-GOey__ptTS8XdBm1DYz4W01tRIiteiQlFVX6_khuafboNSINtcQxvQj42fMy9x91ElGA4x6mGQTHubI9Pt_CBeXZIw3ua1VVM8MjpJPSNnbRTpcCg_XGYYfUj0YWPOO1WBa7azan5XTGWg8sd7VhItYbUz3VNjlo-ghka8WDj_xPfHeaHg_1YCVZbezyY6gteiSiS1RyVE-KLJf-gK6AECEt5trNJCyF534Su0JbTZ7pLAhuj6lvz8SiuRkHZ63hsB8GQViB6rwt78jTDCmU2dyecW1fhOv51faIRfrVlBv4aWFFPFZd7QbsMVgFV7OQvk__JL_BT3LOSOixXZ9sRAj_BGutlb0OZ25zVEwz-GQzD9u8LUf2xC4iXpXIQN5erhID8Fy7cVCdRCE6ilJ1ptQMTNYS8SObI424gd-uHUK6S4NNPwvOGjJkNsGEiPVrZ6UKqJfK3JO7bO5QRGXk_Oyc9jRJCIBebNA_OFzTm0Opvu_2nWsCE_biUvRlIs-P-TmhRBK1Zh_KGGcENW-f4CZyejGsukigPr15Gvh9jYcHu56X0G-m5_DVDbRU6g5UBLdxfCoX0_2J8l5hGOn8iR2HPAci4bigcokC1tD5km1GNEBBdPYa69JphGrfy3v902jtTfgYwrTg3fGmXra5bMpFnhXqaxsQsNWMeV07DYwiuCeck9EVZrlwK8-L_TgRLJYph2ziyAHPoIupK8y33jedMSpGhqZ_4FvWZBt3eaQl4eRzR1bl-8mVq_M3zdE8vrtb9k3HRTNFyxX8P-kd7XvA2BxpF8KG_0ndbnt9A_BAZYMD8Nd7zDqIANzHRNwvsr8Sfrj_0-jmnmPA-dWtaWbXAk13ssM1XZMyH6rCY6gTQJ_X39M30WBft94y24WFluM8uu0YDdTwmAoZKkW9xYPOUhtFGfrrHDwY6YvuNNEKFEsZlV-xjPNe8JLGVlrftDxactyHfsnC2O_sXVhocj6dkYugJULM8fOMZE5yg64nJtNvnsOEXiQi29ns_hav8iraUPY-oeFvQnFlbGQAQAckytOD4oI7s05u5iFsOJoq0vww0uvTs3QlRy-n71s3JF2FIdmbe1i8e6yzCx-XLjaI20R4etdG69PrpbduPtk_bs4jicMI-4Eyl-kvEZK83NyI1eVvMr_x4barS66HUmCDXUIv5sbBlUS9p9joHj_HI4gzyaDiF4ivjpR2IeLKV4E7BvncsMMlUaoYQcQ2XC2HGCEqGLy806jAwxI_w-IofPWEZ94c_62cd76x8XMMN3ZxCCMPt8YsjiZzUnM5Spu4dBDxIGdaz5u4Hcxvqxsfb_ycgd2zn_LaTWaRminQIZL-C740AH2QkD-zMBvCpG5-rBLLlifPKk41r4exbjU_aZdL4rfBInH09rOsfoqX6f1oK8hgcKyKgUUgl8ASz3dzs_7a1kMGCdUlQxKFuX5LPSHC3HqfkWJTVv0uJSdC3Znq5f3aL6Pv9AZ5h78T0B8bAQV_UH_NCJ4IJp7uYXhFSZBL95Hrw7kSIDYM26Xbsa1Ljg1PoJ4O7hy_xU5HnQ5peXFH6oJvAu_ORWfMxD4Y0eanmzhqLDzCLL4d3dFCQL9aLNgwK-JU4oorX8PUuZjTelYg" nonce="7eedca0952b49c955eaf1438aaec1498" charset="UTF-8"></script></head>
+    <link rel="stylesheet" href="home.css">
+    <title>Home - Kosmikos</title>
+</head>
 
 <body>
     <header>
@@ -17,23 +14,157 @@
                 <span></span>
             </div>
             <ul>
-                <li><a href="/about_us"> About Us </a></li>
-                <li><a href="/profile"> Profile </a></li>
+                <li><a href="/about-us">About Us</a></li>
+                <li><a href="/profile">Profile</a></li>
             </ul>
         </nav>
     
-        <h1>Home</h1>
-        <p>See what everyone's upto!</p>
+        <h1>Your Kosmos</h1>
+        <p>See what everyone's up to!</p>
     </header>
+    
+    <main>
+        <!-- Post Buttons -->
+        <section class="post-options">
+            <button class="post-btn" onclick="toggleForm('text-form')">Text</button>
+            <button class="post-btn" onclick="toggleForm('image-form')">Image</button>
+            <button class="post-btn" onclick="toggleForm('video-form')">Video</button>
+            <button class="post-btn" onclick="toggleForm('audio-form')">Audio</button>
+            <button class="post-btn" onclick="toggleForm('link-form')">Link</button>
+        </section>
 
-    
-    
+        <!-- Forms for Posting -->
+        <section class="post-forms">
+            <!-- Text Post Form -->
+            <form id="text-form" class="post-form hidden">
+                <h3>Create a Text Post</h3>
+                <textarea id="text-content" placeholder="Write something..."></textarea>
+                <button type="button" onclick="submitPost('text')">Post</button>
+            </form>
+
+            <!-- Image Post Form -->
+            <form id="image-form" class="post-form hidden">
+                <h3>Upload an Image</h3>
+                <input type="file" id="image-content" accept="image/*">
+                <button type="button" onclick="submitPost('image')">Post</button>
+            </form>
+
+            <!-- Video Post Form -->
+            <form id="video-form" class="post-form hidden">
+                <h3>Upload a Video</h3>
+                <input type="file" id="video-content" accept="video/*">
+                <button type="button" onclick="submitPost('video')">Post</button>
+            </form>
+
+            <!-- Audio Post Form -->
+            <form id="audio-form" class="post-form hidden">
+                <h3>Upload an Audio File</h3>
+                <input type="file" id="audio-content" accept="audio/*">
+                <button type="button" onclick="submitPost('audio')">Post</button>
+            </form>
+
+            <!-- Link Post Form -->
+            <form id="link-form" class="post-form hidden">
+                <h3>Share a Link</h3>
+                <input type="url" id="link-content" placeholder="Enter URL">
+                <button type="button" onclick="submitPost('link')">Post</button>
+            </form>
+        </section>
+
+        <!-- Feed -->
+        <section class="feed">
+            <!-- Posts from the backend will be inserted here -->
+        </section>
+    </main>
+
     <footer>
-        <p> &copy;2024 Kosmikos. All rights reserved</p>
+        <p>&copy;2024 Kosmikos. All rights reserved</p>
         <div class="social">
-            <a href="">Instagram</a>
-            <a href="">Facebook</a>
-            <a href="">X</a>
+            <a href="#">Instagram</a>
+            <a href="#">Facebook</a>
+            <a href="#">X</a>
         </div>
     </footer>
+
+    <script>
+        function toggleForm(formId) {
+            document.querySelectorAll('.post-form').forEach(form => {
+                form.classList.add('hidden');
+            });
+            document.getElementById(formId).classList.toggle('hidden');
+        }
+
+        async function fetchPosts() {
+            try {
+                const response = await fetch("http://localhost:5000/posts");
+                const posts = await response.json();
+
+                const feed = document.querySelector(".feed");
+                feed.innerHTML = ""; // Clear existing posts
+
+                posts.forEach(post => {
+                    const postElement = document.createElement("div");
+                    postElement.classList.add("post");
+
+                    if (post.type === "text") {
+                        postElement.innerHTML = `<h3>Text Post</h3><p>${post.content}</p>`;
+                    } else if (post.type === "image") {
+                        postElement.innerHTML = `<h3>Image Post</h3><img src="${post.content}" alt="Image">`;
+                    } else if (post.type === "video") {
+                        postElement.innerHTML = `<h3>Video Post</h3><video controls><source src="${post.content}" type="video/mp4"></video>`;
+                    } else if (post.type === "audio") {
+                        postElement.innerHTML = `<h3>Audio Post</h3><audio controls><source src="${post.content}" type="audio/mpeg"></audio>`;
+                    } else if (post.type === "link") {
+                        postElement.innerHTML = `<h3>Link Post</h3><a href="${post.content}" target="_blank">${post.content}</a>`;
+                    }
+
+                    feed.appendChild(postElement);
+                });
+            } catch (error) {
+                console.error("Error fetching posts:", error);
+            }
+        }
+
+        async function submitPost(type) {
+            let content;
+            if (type === "text") {
+                content = document.getElementById("text-content").value.trim();
+                if (!content) {
+                    alert("Text content cannot be empty");
+                    return;
+                }
+            } else if (type === "link") {
+                content = document.getElementById("link-content").value.trim();
+                if (!content.startsWith("http")) {
+                    alert("Enter a valid URL");
+                    return;
+                }
+            }
+
+            const postData = { content }; // Ensure the structure is correct
+            console.log("Submitting post:", postData);
+
+            try {
+                const response = await fetch(`http://localhost:5000/post/${type}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(postData),
+                });
+
+                const result = await response.json();
+                console.log("Server response:", result);
+
+                if (response.ok) {
+                    fetchPosts(); // Refresh feed
+                } else {
+                    console.error("Error submitting post:", result.error);
+                }
+            } catch (error) {
+                console.error("Network error:", error);
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", fetchPosts);
+    </script>
 </body>
+</html>

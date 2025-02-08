@@ -1,90 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="utf-8" />
-    <link rel="stylesheet" href="style_profile.css">
+    <link rel="stylesheet" href="profile.css">
     <title>Profile - Kosmikos</title>
-    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script> <!-- Font Awesome for icons -->
 </head>
 
 <body>
-    <aside class="sidebar">
-        <div class="logo">
-            <img src="logo.png" alt="Kosmikos Logo">
-        </div>
-        <ul class="nav-links">
-            <li>
-                <a href="/">
-                    <i class="fas fa-home"></i>
-                    <span>Home</span>
-                </a>
-            </li>
-            <li>
-                <a href="/profile">
-                    <i class="fas fa-user"></i>
-                    <span>Profile</span>
-                </a>
-            </li>
-            <li>
-                <a href="/about_us">
-                    <i class="fas fa-info-circle"></i>
-                    <span>About Us</span>
-                </a>
-            </li>
-            <li>
-                <a href="#contact">
-                    <i class="fas fa-envelope"></i>
-                    <span>Contact</span>
-                </a>
-            </li>
-            <li>
-                <a href="/settings">
-                    <i class="fas fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-            </li>
-        </ul>
-    </aside>
-
-    <main>
-        <header>
-            <h1>PROFILE</h1>
-            <p>Customize your profile here!</p>
-        </header>
-
-        <section class="profile-content">
-            <h2>Personalize Your Profile</h2>
-            <p>
-                Make your profile stand out by customizing your avatar, bio, and preferences. Kosmikos makes it easy to connect with others in a meaningful way.
-            </p>
-
-            <div class="profile-options">
-                <div class="option-item">
-                    <h3>Update Avatar</h3>
-                    <p>Upload a new picture to refresh your look.</p>
-                </div>
-                <div class="option-item">
-                    <h3>Edit Bio</h3>
-                    <p>Share something about yourself to help others connect with you.</p>
-                </div>
-                <div class="option-item">
-                    <h3>Change Preferences</h3>
-                    <p>Adjust settings to tailor your experience on Kosmikos.</p>
-                </div>
+    <header>
+        <nav>
+            <div class="logo">
+                <img src="logo.png" alt="Kosmikos" style="height: 100px; width: 100px;">
+                <span></span>
+            </div>
+            <ul>
+                <li><a href="/home">Home</a></li>
+                <li><a href="/about-us">About Us</a></li>
+            </ul>
+        </nav>
+    
+        <h1>PROFILE</h1>
+        <p>Customize your profile here!</p>
+    </header>
+    
+    <main class="profile-main">
+        <section class="profile-header">
+            <div class="profile-pic">
+                <img src="profile-pic.jpg" alt="User Profile Picture" id="profile-img">
+                <input type="file" id="profile-pic-upload" accept="image/*">
+            </div>
+            <div class="profile-info">
+                <label for="user-name">Name:</label>
+                <input type="text" id="user-name" placeholder="Enter your name">
+                
+                <label for="bio">Bio:</label>
+                <textarea id="bio" placeholder="Write your bio here"></textarea>
             </div>
         </section>
+
+        <section class="profile-stats">
+            <div class="stats-box">
+                <label for="followers-count">Followers:</label>
+                <input type="number" id="followers-count" placeholder="0">
+            </div>
+            <div class="stats-box">
+                <label for="following-count">Following:</label>
+                <input type="number" id="following-count" placeholder="0">
+            </div>
+            <div class="stats-box">
+                <label for="likes-count">Likes:</label>
+                <input type="number" id="likes-count" placeholder="0">
+            </div>
+        </section>
+
+        <section class="user-posts">
+            <h3>Your Posts</h3>
+            <textarea id="new-post-content" placeholder="Write something..."></textarea>
+            <button onclick="addPost()">Add Post</button>
+            <div id="posts-feed">
+                <!-- Posts will be dynamically inserted here -->
+            </div>
+        </section>
+
+        <button id="save-profile-btn" onclick="saveProfile()">Save Profile</button>
     </main>
 
-    <footer id="contact">
-        <p> &copy;2024 Kosmikos. All rights reserved</p>
+    <footer>
+        <p>&copy;2024 Kosmikos. All rights reserved</p>
         <div class="social">
-            <a href="">Instagram</a>
-            <a href="">Facebook</a>
-            <a href="">X</a>
+            <a href="#">Instagram</a>
+            <a href="#">Facebook</a>
+            <a href="#">X</a>
         </div>
     </footer>
+
+    <script>
+        function saveProfile() {
+            const profileData = {
+                name: document.getElementById("user-name").value,
+                bio: document.getElementById("bio").value,
+                followers: document.getElementById("followers-count").value,
+                following: document.getElementById("following-count").value,
+                likes: document.getElementById("likes-count").value,
+                profilePic: document.getElementById("profile-img").src
+            };
+            console.log("Profile saved:", profileData);
+            alert("Profile saved!");
+        }
+
+        function addPost() {
+            const postContent = document.getElementById("new-post-content").value;
+            if (postContent.trim() === "") return;
+
+            const postElement = document.createElement("div");
+            postElement.classList.add("post");
+            postElement.innerHTML = `<p>${postContent}</p>`;
+            document.getElementById("posts-feed").appendChild(postElement);
+
+            document.getElementById("new-post-content").value = "";
+        }
+
+        document.getElementById("profile-pic-upload").addEventListener("change", function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById("profile-img").src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    </script>
 </body>
-
 </html>
-
