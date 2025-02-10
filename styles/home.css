@@ -1,0 +1,254 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #0d0d0d;
+    color: #fff;
+}
+
+/* Header Styles */
+header {
+    background: linear-gradient(to bottom, #5b5b5b, #0d0d0d);
+    color: #fff;
+    padding: 0;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+}
+
+header h1 {
+    font-size: 80px;
+    padding-top: 30px;
+    margin: 0;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+header p {
+    margin: 0.8rem 0 0;
+    padding-bottom: 30px;
+    font-size: 1.2rem;
+    opacity: 0.8;
+}
+
+/* Navigation Styles */
+nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background-color: #000;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.7);
+}
+
+nav .logo {
+    display: flex;
+    align-items: center;
+}
+
+nav .logo img {
+    height: 40px;
+    margin-right: 0.8rem;
+}
+
+nav .logo span {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ff9900;
+    text-transform: uppercase;
+}
+
+nav ul {
+    list-style: none;
+    display: flex;
+    gap: 1rem;
+    margin: 0;
+    padding: 20px;
+}
+
+nav ul li a {
+    text-decoration: none;
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    transition: all 0.3s ease;
+}
+
+nav ul li a:hover {
+    background-color: #ff9900;
+    color: #000;
+    border-color: #ff9900;
+    transform: scale(1.05);
+}
+
+/* Main Section for Post Buttons and Feed */
+main {
+    padding: 2rem 4rem;
+}
+
+.post-options {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 3rem;
+}
+
+.post-btn {
+    background-color: #ff9900;
+    color: #000;
+    font-size: 1.2rem;
+    padding: 1rem 2rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.post-btn:hover {
+    background-color: #e68a00;
+    transform: scale(1.05);
+}
+
+/* Feed Section */
+.feed {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.post {
+    background-color: #1a1a1a;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.6);
+}
+
+.post h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: #ff9900;
+}
+
+.post p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #ccc;
+}
+
+.post img {
+    width: 100%;
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.post video,
+.post audio {
+    width: 100%;
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+/* Footer Styles */
+footer {
+    background: #0d0d0d;
+    color: #fff;
+    padding: 2rem 0;
+    text-align: center;
+    box-shadow: 0 -4px 8px rgba(0,0,0,0.4);
+}
+
+footer p {
+    margin: 0.5rem 0;
+}
+
+footer a {
+    text-decoration: none;
+    color: #ffffff;
+    margin: 0 0.5rem;
+    font-size: 1.5rem;
+    transition: color 0.3s ease;
+}
+
+footer .social a:hover {
+    color: #ff9900;
+}
+
+/* Post Buttons */
+.post-options {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.post-btn {
+    background-color: #ff9900;
+    color: #000;
+    font-size: 1.2rem;
+    padding: 1rem 2rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.post-btn:hover {
+    background-color: #e68a00;
+    transform: scale(1.05);
+}
+
+/* Forms */
+.post-forms {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.post-form {
+    background-color: #1a1a1a;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.6);
+    width: 50%;
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.post-form h3 {
+    color: #ff9900;
+    text-align: center;
+}
+
+.post-form textarea, 
+.post-form input {
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 5px;
+    background-color: #262626;
+    color: #fff;
+}
+
+.post-form button {
+    background-color: #ff9900;
+    color: #000;
+    font-size: 1rem;
+    padding: 0.8rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.post-form button:hover {
+    background-color: #e68a00;
+    transform: scale(1.05);
+}
+
+/* Hide forms by default */
+.hidden {
+    display: none;
+}
