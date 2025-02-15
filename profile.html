@@ -10,106 +10,41 @@
     <header>
         <nav>
             <div class="logo">
-                <img src="logo.png" alt="Kosmikos" style="height: 100px; width: 100px;">
-                <span></span>
+                <img src="images/logo.png" alt="Kosmikos Logo" style="height: 100px; width: 100px;">
             </div>
             <ul>
                 <li><a href="/home">Home</a></li>
                 <li><a href="/about-us">About Us</a></li>
+                <li><a href="/logout">Logout</a></li>
             </ul>
         </nav>
-    
-        <h1>PROFILE</h1>
-        <p>Customize your profile here!</p>
     </header>
-    
+
     <main class="profile-main">
         <section class="profile-header">
             <div class="profile-pic">
-                <img src="profile-pic.jpg" alt="User Profile Picture" id="profile-img">
+                <img src="images/default-profile.jpg" alt="User Profile Picture" id="profile-img">
                 <input type="file" id="profile-pic-upload" accept="image/*">
             </div>
             <div class="profile-info">
                 <label for="user-name">Name:</label>
-                <input type="text" id="user-name" placeholder="Enter your name">
+                <input type="text" id="user-name">
                 
                 <label for="bio">Bio:</label>
-                <textarea id="bio" placeholder="Write your bio here"></textarea>
+                <textarea id="bio"></textarea>
             </div>
         </section>
 
-        <section class="profile-stats">
-            <div class="stats-box">
-                <label for="followers-count">Followers:</label>
-                <input type="number" id="followers-count" placeholder="0">
-            </div>
-            <div class="stats-box">
-                <label for="following-count">Following:</label>
-                <input type="number" id="following-count" placeholder="0">
-            </div>
-            <div class="stats-box">
-                <label for="likes-count">Likes:</label>
-                <input type="number" id="likes-count" placeholder="0">
-            </div>
-        </section>
+        <!-- Greeting Below Profile -->
+        <h2 id="user-greeting"></h2>
 
-        <section class="user-posts">
-            <h3>Your Posts</h3>
-            <textarea id="new-post-content" placeholder="Write something..."></textarea>
-            <button onclick="addPost()">Add Post</button>
-            <div id="posts-feed">
-                <!-- Posts will be dynamically inserted here -->
-            </div>
-        </section>
-
-        <button id="save-profile-btn" onclick="saveProfile()">Save Profile</button>
+        <button id="save-profile-btn">Save Profile</button>
     </main>
 
     <footer>
         <p>&copy;2024 Kosmikos. All rights reserved</p>
-        <div class="social">
-            <a href="#">Instagram</a>
-            <a href="#">Facebook</a>
-            <a href="#">X</a>
-        </div>
     </footer>
 
-    <script>
-        function saveProfile() {
-            const profileData = {
-                name: document.getElementById("user-name").value,
-                bio: document.getElementById("bio").value,
-                followers: document.getElementById("followers-count").value,
-                following: document.getElementById("following-count").value,
-                likes: document.getElementById("likes-count").value,
-                profilePic: document.getElementById("profile-img").src
-            };
-            console.log("Profile saved:", profileData);
-            alert("Profile saved!");
-        }
-
-        function addPost() {
-            const postContent = document.getElementById("new-post-content").value;
-            if (postContent.trim() === "") return;
-
-            const postElement = document.createElement("div");
-            postElement.classList.add("post");
-            postElement.innerHTML = `<p>${postContent}</p>`;
-            document.getElementById("posts-feed").appendChild(postElement);
-
-            document.getElementById("new-post-content").value = "";
-        }
-
-        document.getElementById("profile-pic-upload").addEventListener("change", function(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById("profile-img").src = e.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-    </script>
+    <script src="profile.js"></script>  <!-- Fetch user details dynamically -->
 </body>
 </html>
