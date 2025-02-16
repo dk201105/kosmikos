@@ -11,20 +11,19 @@
         <nav>
             <div class="logo">
                 <img src="logo.png" alt="Kosmikos" style="height: 100px; width: 100px;">
-                <span></span>
+                <span>Kosmikos</span>
             </div>
             <ul>
                 <li><a href="/about-us">About Us</a></li>
                 <li><a href="/profile">Profile</a></li>
+                <li><a href="/logout">Logout</a></li>
             </ul>
         </nav>
-    
         <h1>Your Kosmos</h1>
-        <p>See what everyone's up to!</p>
+        <p>See what your friends are up to!</p>
     </header>
     
     <main>
-        <!-- Post Buttons -->
         <section class="post-options">
             <button class="post-btn" onclick="toggleForm('text-form')">Text</button>
             <button class="post-btn" onclick="toggleForm('image-form')">Image</button>
@@ -33,37 +32,32 @@
             <button class="post-btn" onclick="toggleForm('link-form')">Link</button>
         </section>
 
-        <!-- Forms for Posting -->
+        <!-- Post Forms -->
         <section class="post-forms">
-            <!-- Text Post Form -->
             <form id="text-form" class="post-form hidden">
                 <h3>Create a Text Post</h3>
                 <textarea id="text-content" placeholder="Write something..."></textarea>
                 <button type="button" onclick="submitPost('text')">Post</button>
             </form>
 
-            <!-- Image Post Form -->
             <form id="image-form" class="post-form hidden">
                 <h3>Upload an Image</h3>
                 <input type="file" id="image-content" accept="image/*">
                 <button type="button" onclick="submitPost('image')">Post</button>
             </form>
 
-            <!-- Video Post Form -->
             <form id="video-form" class="post-form hidden">
                 <h3>Upload a Video</h3>
                 <input type="file" id="video-content" accept="video/*">
                 <button type="button" onclick="submitPost('video')">Post</button>
             </form>
 
-            <!-- Audio Post Form -->
             <form id="audio-form" class="post-form hidden">
                 <h3>Upload an Audio File</h3>
                 <input type="file" id="audio-content" accept="audio/*">
                 <button type="button" onclick="submitPost('audio')">Post</button>
             </form>
 
-            <!-- Link Post Form -->
             <form id="link-form" class="post-form hidden">
                 <h3>Share a Link</h3>
                 <input type="url" id="link-content" placeholder="Enter URL">
@@ -73,18 +67,10 @@
 
         <!-- Feed -->
         <section class="feed">
-            <!-- Posts from the backend will be inserted here -->
+            <h2>Posts from People You Follow</h2>
+            <div id="posts-feed"></div>
         </section>
     </main>
-
-    <footer>
-        <p>&copy;2024 Kosmikos. All rights reserved</p>
-        <div class="social">
-            <a href="#">Instagram</a>
-            <a href="#">Facebook</a>
-            <a href="#">X</a>
-        </div>
-    </footer>
 
     <script>
         function toggleForm(formId) {
@@ -96,26 +82,28 @@
 
         async function fetchPosts() {
             try {
-                const response = await fetch("http://localhost:5000/posts");
+                const response = await fetch("/posts");
                 const posts = await response.json();
 
-                const feed = document.querySelector(".feed");
-                feed.innerHTML = ""; // Clear existing posts
+                const feed = document.getElementById("posts-feed");
+                feed.innerHTML = "";
 
                 posts.forEach(post => {
                     const postElement = document.createElement("div");
                     postElement.classList.add("post");
 
+                    postElement.innerHTML = `<h3>${post.username}</h3>`;
+
                     if (post.type === "text") {
-                        postElement.innerHTML = `<h3>Text Post</h3><p>${post.content}</p>`;
+                        postElement.innerHTML += `<p>${post.content}</p>`;
                     } else if (post.type === "image") {
-                        postElement.innerHTML = `<h3>Image Post</h3><img src="${post.content}" alt="Image">`;
+                        postElement.innerHTML += `<img src="${post.content}" alt="Image">`;
                     } else if (post.type === "video") {
-                        postElement.innerHTML = `<h3>Video Post</h3><video controls><source src="${post.content}" type="video/mp4"></video>`;
+                        postElement.innerHTML += `<video controls><source src="${post.content}" type="video/mp4"></video>`;
                     } else if (post.type === "audio") {
-                        postElement.innerHTML = `<h3>Audio Post</h3><audio controls><source src="${post.content}" type="audio/mpeg"></audio>`;
+                        postElement.innerHTML += `<audio controls><source src="${post.content}" type="audio/mpeg"></audio>`;
                     } else if (post.type === "link") {
-                        postElement.innerHTML = `<h3>Link Post</h3><a href="${post.content}" target="_blank">${post.content}</a>`;
+                        postElement.innerHTML += `<a href="${post.content}" target="_blank">${post.content}</a>`;
                     }
 
                     feed.appendChild(postElement);
@@ -126,41 +114,27 @@
         }
 
         async function submitPost(type) {
+            let formData = new FormData();
             let content;
+
             if (type === "text") {
                 content = document.getElementById("text-content").value.trim();
-                if (!content) {
-                    alert("Text content cannot be empty");
-                    return;
-                }
+                formData.append("content", content);
             } else if (type === "link") {
                 content = document.getElementById("link-content").value.trim();
-                if (!content.startsWith("http")) {
-                    alert("Enter a valid URL");
-                    return;
-                }
+                formData.append("content", content);
+            } else {
+                const fileInput = document.getElementById(`${type}-content`);
+                formData.append("file", fileInput.files[0]);
             }
 
-            const postData = { content }; // Ensure the structure is correct
-            console.log("Submitting post:", postData);
+            const response = await fetch(`/post/${type}`, {
+                method: "POST",
+                body: formData,
+            });
 
-            try {
-                const response = await fetch(`http://localhost:5000/post/${type}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(postData),
-                });
-
-                const result = await response.json();
-                console.log("Server response:", result);
-
-                if (response.ok) {
-                    fetchPosts(); // Refresh feed
-                } else {
-                    console.error("Error submitting post:", result.error);
-                }
-            } catch (error) {
-                console.error("Network error:", error);
+            if (response.ok) {
+                fetchPosts();
             }
         }
 

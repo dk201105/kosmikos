@@ -1,16 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <link rel="stylesheet" href="profile.css">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Profile - Kosmikos</title>
+    <link rel="stylesheet" href="/profile.css">
 </head>
 
 <body>
     <header>
         <nav>
             <div class="logo">
-                <img src="images/logo.png" alt="Kosmikos Logo" style="height: 100px; width: 100px;">
+                <img src="images/logo.png" alt="Kosmikos Logo">
+                <span>Kosmikos</span>
             </div>
             <ul>
                 <li><a href="/home">Home</a></li>
@@ -21,30 +23,43 @@
     </header>
 
     <main class="profile-main">
-        <section class="profile-header">
+        <!-- Profile Display Mode -->
+        <section id="profile-display" class="hidden">
+            <div class="profile-container">
+                <img src="images/default-profile.jpg" alt="Profile Picture" id="display-profile-img">
+                <div class="profile-text">
+                    <h2 id="display-user-name">User Name</h2>
+                    <p id="display-bio">User bio will appear here...</p>
+                </div>
+            </div>
+            <button id="edit-profile-btn">Edit Profile</button>
+        </section>
+
+        <!-- Profile Edit Mode -->
+        <section id="profile-edit">
             <div class="profile-pic">
-                <img src="images/default-profile.jpg" alt="User Profile Picture" id="profile-img">
+                <img src="images/default-profile.jpg" alt="Profile Picture" id="profile-img">
+                
+                <!-- Custom Upload Button -->
+                <label for="profile-pic-upload" class="upload-btn">Change Picture</label>
                 <input type="file" id="profile-pic-upload" accept="image/*">
             </div>
+            
             <div class="profile-info">
                 <label for="user-name">Name:</label>
                 <input type="text" id="user-name">
-                
+
                 <label for="bio">Bio:</label>
                 <textarea id="bio"></textarea>
             </div>
+            <button id="save-profile-btn">Save Profile</button>
         </section>
-
-        <!-- Greeting Below Profile -->
-        <h2 id="user-greeting"></h2>
-
-        <button id="save-profile-btn">Save Profile</button>
     </main>
 
     <footer>
         <p>&copy;2024 Kosmikos. All rights reserved</p>
     </footer>
 
-    <script src="profile.js"></script>  <!-- Fetch user details dynamically -->
+    <script src="/profile.js"></script>
 </body>
 </html>
