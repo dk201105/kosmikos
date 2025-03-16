@@ -137,11 +137,94 @@
                     }
 
                     postElement.appendChild(postContent);
+                    
+                    const commentsSection = document.createElement("div");
+                    commentsSection.classList.add("comments-section");
+                    commentsSection.id = `comments-${post.id}`;
+
+                    commentsSection.innerHTML = `
+                        <h4>Comments</h4>
+                        <div class="comments-list" id="comments-list-${post.id}"></div>
+                        <div class="search-bar">
+                            <input type="text" id="comment-input-${post.id}" placeholder="Write a comment...">
+                            <button onclick="submitComment(${post.id})">Comment</button>
+                        </div>
+                    `;
+
+                    // Append comments section
+                    postElement.appendChild(commentsSection);
+                    fetchComments(post.id);
                     feed.appendChild(postElement);
                 });
 
             } catch (error) {
                 console.error("Error fetching posts:", error);
+            }
+        }
+
+        function createCommentSection(postId) {
+            const commentContainer = document.createElement("div");
+            commentContainer.classList.add("comment-input-container");
+
+            const commentInput = document.createElement("textarea");
+            commentInput.classList.add("comment-input");
+            commentInput.placeholder = "Write a comment...";
+
+            const commentButton = document.createElement("button");
+            commentButton.classList.add("comment-button");
+            commentButton.innerText = "Comment";
+
+            commentButton.addEventListener("click", () => {
+                postComment(postId, commentInput.value);
+                commentInput.value = ""; // Clear input after posting
+            });
+
+            commentContainer.appendChild(commentInput);
+            commentContainer.appendChild(commentButton);
+
+            return commentContainer;
+        }
+
+
+        async function fetchComments(postId) {
+            try {
+                const response = await fetch(`/comments/${postId}`);
+                const comments = await response.json();
+                const commentsList = document.getElementById(`comments-list-${postId}`);
+                commentsList.innerHTML = "";
+
+                comments.forEach(comment => {
+                    const commentElement = document.createElement("div");
+                    commentElement.classList.add("comment");
+                    commentElement.innerHTML = `
+                        <strong>${comment.username}</strong>: ${comment.content}
+                    `;
+                    commentsList.appendChild(commentElement);
+                });
+            } catch (error) {
+                console.error("Error fetching comments:", error);
+            }
+        }
+
+        async function submitComment(postId) {
+            const commentInput = document.getElementById(`comment-input-${postId}`);
+            const content = commentInput.value.trim();
+            if (!content) return alert("Comment cannot be empty!");
+
+            try {
+                const response = await fetch("/comments", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ post_id: postId, content })
+                });
+                if (response.ok) {
+                    commentInput.value = "";
+                    fetchComments(postId);
+                } else {
+                    alert("Error posting comment.");
+                }
+            } catch (error) {
+                console.error("Error submitting comment:", error);
             }
         }
 

@@ -253,17 +253,20 @@ app.post("/post/link", requireAuth, (req, res) => {
 
 // ✅ Get Posts
 app.get("/posts", requireAuth, (req, res) => {
+    const userId = req.session.user.id;
+
     const sql = `
-    SELECT posts.*, users.f_name AS username, users.profile_picture
-    FROM posts 
-    JOIN users ON posts.user_id = users.id 
+    SELECT posts.*, users.f_name AS username, users.profile_picture 
+    FROM posts
+    JOIN users ON posts.user_id = users.id
+    LEFT JOIN settings ON users.id = settings.user_id
+    LEFT JOIN followers ON users.id = followers.following_id AND followers.follower_id = ?
+    WHERE (settings.is_private = 0 OR users.id = ? OR followers.follower_id IS NOT NULL)
     ORDER BY posts.created_at DESC;
     `;
 
-    db.query(sql, (err, results) => {
+    db.query(sql, [userId, userId], (err, results) => {
         if (err) return res.status(500).json({ error: "Database error", details: err });
-
-        console.log("Posts response:", results); // Debugging
 
         res.json(results);
     });
@@ -341,6 +344,58 @@ app.get("/logout", (req, res) => {
 app.post("/signup", (req, res) => {
     // Signup logic remains unchanged
 });
+
+app.post("/comments", requireAuth, (req, res) => {
+    const { post_id, content } = req.body;
+    const user_id = req.session.user.id;
+
+    if (!post_id || !content) {
+        return res.status(400).json({ error: "Post ID and content are required." });
+    }
+
+    const sql = "INSERT INTO comments (user_id, post_id, content) VALUES (?, ?, ?)";
+    db.query(sql, [user_id, post_id, content], (err, result) => {
+        if (err) return res.status(500).json({ error: "Database error", details: err });
+
+        res.json({ message: "Comment added successfully!", comment_id: result.insertId });
+    });
+});
+
+
+app.get("/comments/:post_id", (req, res) => {
+    const { post_id } = req.params;
+
+    const sql = `
+    SELECT comments.*, users.f_name AS username, users.profile_picture 
+    FROM comments
+    JOIN users ON comments.user_id = users.id
+    WHERE comments.post_id = ?
+    ORDER BY comments.created_at ASC;
+    `;
+
+    db.query(sql, [post_id], (err, results) => {
+        if (err) return res.status(500).json({ error: "Database error", details: err });
+
+        res.json(results);
+    });
+});
+
+app.delete("/comments/:id", requireAuth, (req, res) => {
+    const { id } = req.params;
+    const user_id = req.session.user.id;
+
+    const sql = "DELETE FROM comments WHERE id = ? AND user_id = ?";
+    db.query(sql, [id, user_id], (err, result) => {
+        if (err) return res.status(500).json({ error: "Database error", details: err });
+
+        if (result.affectedRows === 0) {
+            return res.status(403).json({ error: "Unauthorized or comment not found." });
+        }
+
+        res.json({ message: "Comment deleted successfully!" });
+    });
+});
+
 
 // ✅ Start Server
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
