@@ -112,14 +112,117 @@ main {
 .feed {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    align-items: center; /* Centers posts horizontally */
+}
+
+.search-bar {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    width: 60%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.search-bar input {
+    flex: 1;
+    padding: 0.8rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 5px;
+    background-color: #262626;
+    color: #fff;
+    margin-right: 10px;
+}
+
+.search-bar button {
+    background-color: #ff9900;
+    color: #000;
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.search-bar button:hover {
+    background-color: #e68a00;
+    transform: scale(1.05);
+}
+
+/* Comment Section */
+.comment-section {
+    margin-top: 1rem;
+    padding: 10px;
+    background: #262626;
+    border-radius: 5px;
+}
+
+.comment-section h4 {
+    color: #ff9900;
+    font-size: 1rem;
+    margin-bottom: 8px;
+}
+
+.comment-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 5px;
+    background-color: #333;
+    color: white;
+}
+
+.comment-button {
+    margin-top: 8px;
+    padding: 5px 10px;
+    background-color: #ff9900;
+    border: none;
+    color: black;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.comment-button:hover {
+    background: #e68a00;
+}
+
+#posts-feed {
+    width: 60%; /* Adjust width as needed */
+    max-width: 600px; /* Prevent it from being too wide */
 }
 
 .post {
-    background-color: #1a1a1a;
-    padding: 1.5rem;
+    width: 100%;
+    padding: 15px;
+    margin: 10px 0;
     border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.6);
+    background: #1f1f1f;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.post-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Username on left, button on right */
+    margin-bottom: 10px;
+}
+
+.follow-btn {
+    padding: 5px 10px;
+    border: none;
+    background: #ff9900;
+    color: rgb(0, 0, 0);
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.follow-btn:hover {
+    background: #e68a00;
 }
 
 .post h3 {
@@ -131,14 +234,17 @@ main {
 .post p {
     font-size: 1.1rem;
     line-height: 1.6;
-    color: #ccc;
+    color: #000000;
 }
 
 .post img {
-    width: 100%;
-    border-radius: 8px;
-    margin-top: 1rem;
+    width: 100%; 
+    height: auto;
+    max-height: 200px;
+    object-fit: cover; /* Prevent distortion */
+    border-radius: 5px; /* Optional: rounded corners */
 }
+
 
 .post video,
 .post audio {

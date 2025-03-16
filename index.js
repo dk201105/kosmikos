@@ -23,7 +23,7 @@ app.use(session({
     secret: "your-secret-key",
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false }
+    cookie: { secure: false }  // Ensure it's set to false in development
 }));
 
 // Database Connection
@@ -44,11 +44,13 @@ db.connect((err) => {
 
 // ✅ Middleware to Protect Routes
 const requireAuth = (req, res, next) => {
+    console.log('Session user:', req.session.user);  // Log session details
     if (!req.session.user) {
         return res.redirect('/login');
     }
     next();
 };
+
 
 // ✅ Protected Routes
 app.get("/home", requireAuth, (req, res) => res.sendFile(path.join(__dirname, "home.html")));
@@ -58,6 +60,8 @@ app.get("/login", (req, res) => res.sendFile(path.join(__dirname, "login.html"))
 app.get("/profile", requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, "profile.html"));  // If stored in 'views' folder
 });
+app.get("/settings", (req, res) => res.sendFile(path.join(__dirname, "settings.html")));
+
 
 // ✅ Login Route (Unchanged)
 app.post("/login", (req, res) => {
@@ -79,10 +83,11 @@ app.post("/login", (req, res) => {
                 f_name: results[0].f_name,
                 email: results[0].email
             };
-            res.redirect('/profile');
+            res.redirect('/profile'); // Ensure the redirection is correct
         } else {
             res.status(401).send('<script>alert("Invalid Email or Password"); window.location.href="/login";</script>');
         }
+        
     });
 });
 
@@ -100,15 +105,106 @@ const upload = multer({ storage: storage });
 
 // ✅ API to Fetch User Data
 app.get("/api/user", requireAuth, (req, res) => {
+    console.log("Session Data:", req.session.user); // Debugging line
+
+    if (!req.session.user || !req.session.user.id) {
+        return res.status(401).json({ error: "Not authenticated" });
+    }
+
     const userId = req.session.user.id;
-    db.query("SELECT f_name, bio, followers, following, likes, profile_pic FROM users WHERE id = ?", 
-    [userId], (err, results) => {
-        if (err) {
-            return res.status(500).json({ error: "Database error" });
+
+    db.query("SELECT f_name, bio, profile_picture FROM users WHERE id = ?", [userId], (err, results) => {
+        if (err || results.length === 0) {
+            console.error("Failed to fetch user data:", err);
+            return res.status(500).json({ error: "Failed to fetch user data" });
         }
-        res.json(results[0]);  // Return user details as JSON
+
+        const user = results[0];
+
+        console.log("User data from DB:", user); // Debugging line
+
+        res.json({
+            f_name: user.f_name,
+            bio: user.bio || "",
+            profile_picture: user.profile_picture || "/images/default-profile.jpg"
+        });
     });
 });
+
+
+
+app.post("/api/user/update", requireAuth, upload.single("profile_picture"), (req, res) => {
+    const { f_name, bio } = req.body;
+    const userId = req.session.user.id;
+    let profilePicPath = req.file ? `/uploads/${req.file.filename}` : null;
+
+    // Construct SQL query
+    let query = "UPDATE users SET f_name = ?, bio = ?";
+    let params = [f_name, bio];
+
+    if (profilePicPath) {
+        query += ", profile_picture = ?";
+        params.push(profilePicPath);
+    }
+
+    query += " WHERE id = ?";
+    params.push(userId);
+
+    // Execute Query
+    db.query(query, params, (err) => {
+        if (err) {
+            console.error("Profile update failed:", err);
+            return res.status(500).json({ error: "Database update failed" });
+        }
+
+        res.json({ message: "Profile updated successfully!", profilePicPath });
+    });
+});
+
+async function submitPost(type) {
+    let formData = new FormData();
+    
+    if (type === "text") {
+        const content = document.getElementById("text-content").value.trim();
+        if (!content) {
+            alert("Text content cannot be empty.");
+            return;
+        }
+        formData.append("content", content);
+    } else if (type === "link") {
+        const content = document.getElementById("link-content").value.trim();
+        if (!content) {
+            alert("Please provide a valid link.");
+            return;
+        }
+        formData.append("content", content);
+    } else {
+        const fileInput = document.getElementById(`${type}-content`);
+        if (!fileInput.files.length) {
+            alert("Please upload a file.");
+            return;
+        }
+        formData.append("file", fileInput.files[0]);
+    }
+
+    try {
+        const response = await fetch(`/post/${type}`, {
+            method: "POST",
+            body: formData
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+            alert("Post uploaded successfully!");
+            fetchPosts();  // Refresh feed
+        } else {
+            alert(result.error || "Something went wrong!");
+        }
+    } catch (error) {
+        console.error("Error posting:", error);
+    }
+}
+
 
 
 // ✅ Route to Post Text (Now Linked to User)
@@ -133,39 +229,95 @@ app.post("/post/image", requireAuth, upload.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Image file is required" });
 
     const imageUrl = `/uploads/${req.file.filename}`;
-    const sql = "INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)";
-    db.query(sql, [req.session.user.id, "image", imageUrl], (err) => {
-        if (err) return res.status(500).json({ error: err });
+    db.query("INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)", 
+        [req.session.user.id, "image", imageUrl], (err) => {
+        if (err) return res.status(500).json({ error: "Database error" });
         res.status(201).json({ message: "Image post added successfully", url: imageUrl });
     });
 });
 
+app.post("/post/video", requireAuth, upload.single("file"), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "Video file is required" });
+
+    const videoUrl = `/uploads/${req.file.filename}`;
+    db.query("INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)", 
+        [req.session.user.id, "video", videoUrl], (err) => {
+        if (err) return res.status(500).json({ error: "Database error" });
+        res.status(201).json({ message: "Video post added successfully", url: videoUrl });
+    });
+});
+
+app.post("/post/audio", requireAuth, upload.single("file"), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "Audio file is required" });
+
+    const audioUrl = `/uploads/${req.file.filename}`;
+    db.query("INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)", 
+        [req.session.user.id, "audio", audioUrl], (err) => {
+        if (err) return res.status(500).json({ error: "Database error" });
+        res.status(201).json({ message: "Audio post added successfully", url: audioUrl });
+    });
+});
+
+app.post("/post/link", requireAuth, (req, res) => {
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ error: "Link is required" });
+
+    db.query("INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)", 
+        [req.session.user.id, "link", content], (err) => {
+        if (err) return res.status(500).json({ error: "Database error" });
+        res.status(201).json({ message: "Link post added successfully" });
+    });
+});
+
+
 // ✅ Route to Get Posts (Only From Users You Follow)
 app.get("/posts", requireAuth, (req, res) => {
     const sql = `
-        SELECT posts.*, users.f_name AS username 
-        FROM posts 
-        JOIN users ON posts.user_id = users.id 
-        WHERE posts.user_id IN (SELECT following_id FROM followers WHERE follower_id = ?)
-        ORDER BY posts.created_at DESC
+    SELECT posts.*, users.f_name AS username 
+    FROM posts 
+    JOIN users ON posts.user_id = users.id 
+    ORDER BY posts.created_at DESC;
     `;
+
     db.query(sql, [req.session.user.id], (err, results) => {
-        if (err) return res.status(500).json({ error: err });
+        if (err) {
+            console.error("Database error fetching posts:", err);
+            return res.status(500).json({ error: "Database error", details: err });
+        }
+        
+        console.log("Posts fetched from DB:", results);  // Debugging log
         res.json(results);
     });
 });
 
-// ✅ Follow a User
-app.post("/follow", requireAuth, (req, res) => {
-    const { userToFollow } = req.body;
-    if (!userToFollow) return res.status(400).json({ error: "User ID is required" });
 
-    const sql = "INSERT INTO followers (follower_id, following_id) VALUES (?, ?)";
-    db.query(sql, [req.session.user.id, userToFollow], (err) => {
-        if (err) return res.status(500).json({ error: "Could not follow user" });
-        res.json({ message: "Followed successfully" });
-    });
+// ✅ Follow a User
+app.post("/api/user/follow", async (req, res) => {
+    const { userId } = req.body;
+    const currentUserId = req.session.userId;
+
+    try {
+        // Check if already following
+        const [check] = await db.execute(
+            "SELECT * FROM followers WHERE follower_id = ? AND following_id = ?",
+            [currentUserId, userId]
+        );
+
+        if (check.length > 0) {
+            // Unfollow
+            await db.execute("DELETE FROM followers WHERE follower_id = ? AND following_id = ?", [currentUserId, userId]);
+            return res.json({ isFollowing: false });
+        } else {
+            // Follow
+            await db.execute("INSERT INTO followers (follower_id, following_id) VALUES (?, ?)", [currentUserId, userId]);
+            return res.json({ isFollowing: true });
+        }
+    } catch (error) {
+        console.error("Database Error:", error);
+        res.status(500).json({ error: "Failed to update follow status" });
+    }
 });
+
 
 // ✅ Unfollow a User
 app.post("/unfollow", requireAuth, (req, res) => {
@@ -180,26 +332,54 @@ app.post("/unfollow", requireAuth, (req, res) => {
 });
 
 // ✅ Get Followers Count
-app.get("/followers/count", requireAuth, (req, res) => {
-    const sql = "SELECT COUNT(*) AS count FROM followers WHERE following_id = ?";
-    db.query(sql, [req.session.user.id], (err, results) => {
-        if (err) return res.status(500).json({ error: err });
-        res.json({ followers: results[0].count });
-    });
+app.get("/api/user/followers", async (req, res) => {
+    const userId = req.query.user_id;
+
+    try {
+        const [result] = await db.execute(
+            `SELECT 
+                (SELECT COUNT(*) FROM followers WHERE following_id = ?) AS followers, 
+                (SELECT COUNT(*) FROM followers WHERE follower_id = ?) AS following,
+                EXISTS(SELECT 1 FROM followers WHERE follower_id = ? AND following_id = ?) AS isFollowing`,
+            [userId, userId, req.session.userId, userId]
+        );
+
+        res.json(result[0]);
+    } catch (error) {
+        console.error("Database Error:", error);
+        res.status(500).json({ error: "Failed to retrieve follower data" });
+    }
 });
 
-// ✅ Get Following Count
-app.get("/following/count", requireAuth, (req, res) => {
-    const sql = "SELECT COUNT(*) AS count FROM followers WHERE follower_id = ?";
-    db.query(sql, [req.session.user.id], (err, results) => {
-        if (err) return res.status(500).json({ error: err });
-        res.json({ following: results[0].count });
-    });
-});
 
 // ✅ Logout Route (Unchanged)
 app.get("/logout", (req, res) => {
     req.session.destroy(() => res.redirect("/login"));
+});
+
+app.post("/signup", (req, res) => {
+    const { f_name, username, email, password, confirm_password } = req.body;
+
+    // Validation: Check if all fields are filled
+    if (!f_name || !username || !email || !password || !confirm_password) {
+        return res.status(400).send('<script>alert("All fields are required!"); window.location.href="/";</script>');
+    }
+
+    // Validation: Check if passwords match
+    if (password !== confirm_password) {
+        return res.status(400).send('<script>alert("Passwords do not match!"); window.location.href="/";</script>');
+    }
+
+    // Insert user into MySQL database
+    const sql = "INSERT INTO users (f_name, username, email, password) VALUES (?, ?, ?, ?)";
+    db.query(sql, [f_name, username, email, password], (err, result) => {
+        if (err) {
+            console.error("Database error:", err);
+            return res.status(500).send('<script>alert("Database error! Try again."); window.location.href="/";</script>');
+        }
+
+        res.redirect("/login"); // Redirect to login page after successful signup
+    });
 });
 
 // ✅ Start Server

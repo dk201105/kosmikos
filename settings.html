@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Kosmikos</title>
+    <link rel="stylesheet" href="/settings.css">
+</head>
+<body>
+
+    <header>
+        <nav>
+            <div class="logo">
+                <img src="images/logo.png" alt="Kosmikos Logo">
+                <span>Kosmikos</span>
+            </div>
+            <ul>
+                <li><a href="/home">Home</a></li>
+                <li><a href="/profile">Profile</a></li>
+                <li><a href="/logout">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="settings-container">
+        <h1>Settings</h1>
+
+        <!-- Account Privacy Toggle -->
+        <div class="setting-item">
+            <label for="privacy-toggle">Private Account:</label>
+            <label class="switch">
+                <input type="checkbox" id="privacy-toggle">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <!-- Change Password -->
+        <div class="setting-item">
+            <h2>Change Password</h2>
+            <label for="current-password">Current Password:</label>
+            <input type="password" id="current-password" placeholder="Enter current password">
+            
+            <label for="new-password">New Password:</label>
+            <input type="password" id="new-password" placeholder="Enter new password">
+
+            <label for="confirm-password">Confirm New Password:</label>
+            <input type="password" id="confirm-password" placeholder="Confirm new password">
+
+            <button id="change-password-btn">Change Password</button>
+        </div>
+
+        <!-- Delete Account -->
+        <div class="setting-item danger-zone">
+            <h2>Delete Account</h2>
+            <p>Warning: This action is irreversible!</p>
+            <button id="delete-account-btn">Delete Account</button>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Kosmikos. All rights reserved.</p>
+    </footer>
+
+    <script src="/settings.js"></script>
+</body>
+</html>

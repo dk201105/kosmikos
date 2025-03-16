@@ -30,17 +30,20 @@
                 <div class="profile-text">
                     <h2 id="display-user-name">User Name</h2>
                     <p id="display-bio">User bio will appear here...</p>
+                    <p id="followers">Followers: 0</p>
+                    <p id="following">Following: 0</p>
                 </div>
             </div>
-            <button id="edit-profile-btn">Edit Profile</button>
+            <div class="profile-buttons">
+                <button id="edit-profile-btn">Edit Profile</button>
+                <button id="settings-btn">Settings</button>
+            </div>
         </section>
-
+        
         <!-- Profile Edit Mode -->
         <section id="profile-edit">
             <div class="profile-pic">
                 <img src="images/default-profile.jpg" alt="Profile Picture" id="profile-img">
-                
-                <!-- Custom Upload Button -->
                 <label for="profile-pic-upload" class="upload-btn">Change Picture</label>
                 <input type="file" id="profile-pic-upload" accept="image/*">
             </div>
@@ -48,7 +51,6 @@
             <div class="profile-info">
                 <label for="user-name">Name:</label>
                 <input type="text" id="user-name">
-
                 <label for="bio">Bio:</label>
                 <textarea id="bio"></textarea>
             </div>
@@ -57,7 +59,7 @@
     </main>
 
     <footer>
-        <p>&copy;2024 Kosmikos. All rights reserved</p>
+        <p>&copy; 2024 Kosmikos. All rights reserved.</p>
     </footer>
 
     <script src="/profile.js"></script>

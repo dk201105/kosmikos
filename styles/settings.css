@@ -1,0 +1,202 @@
+/* General Page Styling */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #0d0d0d;
+    color: #fff;
+    margin: 0;
+    padding: 0;
+}
+
+/* Header */
+header {
+    background: linear-gradient(to bottom, #5b5b5b, #0d0d0d);
+    color: #fff;
+    padding: 10px 0;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+}
+
+nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background-color: #000;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.7);
+}
+
+nav .logo {
+    display: flex;
+    align-items: center;
+}
+
+nav .logo img {
+    height: 40px;
+    margin-right: 0.8rem;
+}
+
+nav .logo span {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ff9900;
+    text-transform: uppercase;
+}
+
+nav ul {
+    list-style: none;
+    display: flex;
+    gap: 1rem;
+    margin: 0;
+    padding: 20px;
+}
+
+nav ul li a {
+    text-decoration: none;
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    transition: all 0.3s ease;
+}
+
+nav ul li a:hover {
+    background-color: #ff9900;
+    color: #000;
+    border-color: #ff9900;
+    transform: scale(1.05);
+}
+
+/* Settings Container */
+.settings-container {
+    max-width: 600px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: #1a1a1a;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(255, 153, 0, 0.3);
+    text-align: left;
+}
+
+.settings-container h1 {
+    text-align: center;
+    color: #ff9900;
+}
+
+/* Settings Items */
+.setting-item {
+    margin: 20px;
+}
+
+.setting-item h2 {
+    color: #ff9900;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.setting-item input {
+    width: 100%;
+    padding: 10px;
+    margin: 5px 0;
+    background: #333;
+    color: #fff;
+    border: 1px solid #ff9900;
+    border-radius: 5px;
+}
+
+/* Privacy Toggle (Switch) */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    margin-left: 10px;
+}
+
+.switch input {
+    display: none;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #888;
+    transition: 0.4s;
+    border-radius: 24px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 4px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #ff9900;
+}
+
+input:checked + .slider:before {
+    transform: translateX(24px);
+}
+
+/* Buttons */
+button {
+    background-color: #ff9900;
+    color: #000;
+    padding: 10px;
+    font-size: 1rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: 0.3s;
+    width: 100%;
+    margin-top: 10px;
+}
+
+button:hover {
+    background-color: #ff7700;
+}
+
+/* Delete Account (Danger Zone) */
+.danger-zone {
+    border-top: 2px solid rgb(126, 0, 0);
+    padding-top: 20px;
+    text-align: center;
+}
+
+.danger-zone p {
+    color: rgb(126, 0, 0);
+}
+
+#delete-account-btn {
+    background-color: rgb(126, 0, 0);
+    color: white;
+}
+
+#delete-account-btn:hover {
+    background-color: rgb(78, 0, 0);
+}
+
+/* Footer */
+footer {
+    background: #1a1a1a;
+    color: #fff;
+    text-align: center;
+    padding: 15px;
+    font-size: 14px;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+}
