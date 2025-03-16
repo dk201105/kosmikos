@@ -109,6 +109,46 @@ main {
     transform: scale(1.05);
 }
 
+.search-bar {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 400px; /* Adjust based on your design */
+}
+
+#search-results {
+    position: absolute;
+    top: 100%; /* Makes it appear directly below the input */
+    left: 0;
+    width: 100%;
+    background: white;
+    border: 1px solid #ccc;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.user-result {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    cursor: pointer;
+    gap: 10px;
+}
+
+.user-result:hover {
+    background-color: #f1f1f1;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+}
+
 /* Feed Section */
 .feed {
     display: flex;
@@ -152,6 +192,75 @@ main {
 .search-bar button:hover {
     background-color: #e68a00;
     transform: scale(1.05);
+}
+
+#search-results {
+    position: absolute;
+    width: 100%;
+    max-width: 300px; /* Adjust width as needed */
+    background: black; /* Background black */
+    color: white; /* White text */
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0px 4px 6px rgba(255, 255, 255, 0.2);
+    left: 50%;  /* Center horizontally */
+    transform: translateX(-50%); /* Align center */
+}
+
+/* Style each result item */
+.result-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.result-item:hover {
+    background: #222; /* Darker hover effect */
+}
+
+/* Profile picture inside search results */
+.result-item img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* Username text */
+.result-item span {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+
+.search-results.active {
+    display: block; /* Show only when active */
+}
+
+.search-results .result-item {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid orange;
+}
+
+.search-results .result-item img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 10px;
+}
+
+.search-results .result-item:last-child {
+    border-bottom: none;
+}
+
+.search-results .result-item:hover {
+    background-color: #222; /* Slightly lighter black on hover */
+    cursor: pointer;
 }
 
 /* Comment Section */

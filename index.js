@@ -225,6 +225,69 @@ app.get("/posts", requireAuth, (req, res) => {
     });
 });
 
+app.get("/search/users", requireAuth, (req, res) => {
+    const searchQuery = req.query.query;
+
+    if (!searchQuery) {
+        return res.status(400).json({ error: "Search query is required" });
+    }
+
+    const sql = `
+        SELECT id, f_name, profile_picture 
+        FROM users 
+        WHERE f_name LIKE ? 
+        LIMIT 10;
+    `;
+
+    db.query(sql, [`%${searchQuery}%`], (err, results) => {
+        if (err) {
+            console.error("Error searching users:", err);
+            return res.status(500).json({ error: "Database error" });
+        }
+
+        res.json(results);
+    });
+});
+
+app.get("/profile/:id", requireAuth, async (req, res) => {
+    res.sendFile(path.join(__dirname, "user_profile.html"));
+});
+
+app.get("/api/profile/:id", async (req, res) => {
+    const userId = req.params.id;
+
+    try {
+        const userQuery = "SELECT id, f_name, profile_picture, bio FROM users WHERE id = ?";
+        const userResult = await queryDB(userQuery, [userId]);
+
+        if (userResult.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        const user = userResult[0];
+
+        const postsQuery = "SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC";
+        const posts = await queryDB(postsQuery, [userId]);
+
+        res.json({ user, posts });
+    } catch (error) {
+        console.error("Error fetching profile:", error);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+
+// Helper function for database queries (assuming you're using MySQL)
+function queryDB(sql, params) {
+    return new Promise((resolve, reject) => {
+        db.query(sql, params, (err, results) => {
+            if (err) reject(err);
+            else resolve(results);
+        });
+    });
+}
+
+
 // ✅ Logout Route
 app.get("/logout", (req, res) => {
     req.session.destroy(() => res.redirect("/login"));

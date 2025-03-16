@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Profile</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <header>
+        <h1 id="user-name">User Profile</h1>
+    </header>
+    
+    <section class="profile-info">
+        <img id="profile-pic" src="/images/default-profile.jpg" alt="Profile Picture" class="profile-pic">
+        <h2 id="user-fullname"></h2>
+        <p id="user-bio"></p>
+    </section>
+
+    <section class="user-posts">
+        <h2>Posts</h2>
+        <div id="posts-container"></div>
+    </section>
+
+    <script>
+        async function fetchUserProfile() {
+            const userId = window.location.pathname.split("/").pop();
+            try {
+                const response = await fetch(`/api/profile/${userId}`);
+                const data = await response.json();
+                if (data.error) {
+                    document.body.innerHTML = "<h2>User not found</h2>";
+                    return;
+                }
+
+                document.getElementById("user-name").textContent = data.user.f_name + "'s Profile";
+                document.getElementById("user-fullname").textContent = data.user.f_name;
+                document.getElementById("profile-pic").src = data.user.profile_picture || "/images/default-profile.jpg";
+                document.getElementById("user-bio").textContent = data.user.bio || "No bio available.";
+
+                const postsContainer = document.getElementById("posts-container");
+                postsContainer.innerHTML = data.posts.length > 0 ? 
+                    data.posts.map(post => `<div class="post"><p>${post.content}</p></div>`).join("") :
+                    "<p>No posts yet.</p>";
+
+            } catch (error) {
+                console.error("Error loading profile:", error);
+            }
+        }
+
+        fetchUserProfile();
+    </script>
+</body>
+</html>
