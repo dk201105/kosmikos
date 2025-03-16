@@ -66,7 +66,7 @@ nav ul {
 
 nav ul li a {
     text-decoration: none;
-    color: #fff;
+    color: #ffffff !important; /* Ensures the links stay white */
     padding: 0.5rem 1rem;
     border: 1px solid transparent;
     border-radius: 5px;
@@ -75,10 +75,11 @@ nav ul li a {
 
 nav ul li a:hover {
     background-color: #ff9900;
-    color: #000;
+    color: #000 !important;
     border-color: #ff9900;
     transform: scale(1.05);
 }
+
 
 /* Main Section for Post Buttons and Feed */
 main {
@@ -212,18 +213,6 @@ main {
     margin-bottom: 10px;
 }
 
-.follow-btn {
-    padding: 5px 10px;
-    border: none;
-    background: #ff9900;
-    color: rgb(0, 0, 0);
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.follow-btn:hover {
-    background: #e68a00;
-}
 
 .post h3 {
     font-size: 1.5rem;
@@ -247,18 +236,10 @@ main {
     color: #e68a00;
 }
 
-a {
-    color: #ff9900 !important; /* Force orange */
-    text-decoration: none; /* Remove underline */
-}
-
-a:hover {
-    color: #e68a00 !important; /* Slightly darker orange on hover */
-}
-
-a:visited {
+.post p a:visited {
     color: #ff9900 !important; /* Ensure visited links stay orange */
 }
+
 
 .post img {
     width: 100%; 
