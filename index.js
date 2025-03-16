@@ -91,32 +91,33 @@ app.post("/login", (req, res) => {
 // ✅ Configure Multer for File Uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, "uploads/");
+        cb(null, "uploads/");  // Ensure "uploads" folder exists
     },
     filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
+        cb(null, Date.now() + path.extname(file.originalname));  // Keep original extension
     },
 });
 
+// File filter to allow only certain types
+const fileFilter = (req, file, cb) => {
+    const allowedTypes = ["image", "video", "audio"];
+    if (allowedTypes.some(type => file.mimetype.startsWith(type))) {
+        cb(null, true);
+    } else {
+        cb(new Error("Only images, videos, and audio files are allowed"), false);
+    }
+};
+
+// Multer upload middleware
 const upload = multer({
-    storage: multer.diskStorage({
-        destination: (req, file, cb) => {
-            cb(null, "uploads/");  // Ensure "uploads" folder exists
-        },
-        filename: (req, file, cb) => {
-            cb(null, Date.now() + path.extname(file.originalname));  // Keep original extension
-        },
-    }),
-    fileFilter: (req, file, cb) => {
-        const allowedTypes = ["audio/mpeg", "audio/wav", "audio/mp3"];
-        if (allowedTypes.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error("Only MP3 and WAV audio files are allowed!"), false);
-        }
-    },
-    limits: { fileSize: 10 * 1024 * 1024 }  // 10MB limit
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 },  // 10MB limit
+    fileFilter: fileFilter
 });
+
+module.exports = upload;
+
+
 // ✅ API to Fetch User Data
 app.get("/api/user", requireAuth, (req, res) => {
     console.log("Session Data:", req.session.user);
@@ -252,27 +253,25 @@ app.post("/post/link", requireAuth, (req, res) => {
 
 
 // ✅ Get Posts
-app.get("/posts", requireAuth, (req, res) => {
-    const userId = req.session.user.id;
-
+app.get('/posts', (req, res) => {
     const sql = `
-    SELECT posts.*, users.f_name AS username, users.profile_picture 
-    FROM posts
-    JOIN users ON posts.user_id = users.id
-    LEFT JOIN settings ON users.id = settings.user_id
-    LEFT JOIN followers ON users.id = followers.following_id AND followers.follower_id = ?
-    WHERE (settings.is_private = 0 OR users.id = ? OR followers.follower_id IS NOT NULL)
-    ORDER BY posts.created_at DESC;
+        SELECT p.*, u.f_name, u.profile_picture 
+        FROM posts p 
+        JOIN users u ON p.user_id = u.id 
+        ORDER BY p.created_at DESC
     `;
 
-    db.query(sql, [userId, userId], (err, results) => {
-        if (err) return res.status(500).json({ error: "Database error", details: err });
-
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.error("Error fetching posts:", err);
+            return res.status(500).json({ error: "Failed to fetch posts" });
+        }
+        console.log("Query Result:", results); // Debugging
         res.json(results);
     });
 });
 
-app.get("/search/users", requireAuth, (req, res) => {
+app.get("/search/users", (req, res) => {
     const searchQuery = req.query.query;
 
     if (!searchQuery) {
@@ -296,7 +295,34 @@ app.get("/search/users", requireAuth, (req, res) => {
     });
 });
 
-app.get("/profile/:id", requireAuth, async (req, res) => {
+app.get("/search/posts", (req, res) => {
+    const searchQuery = req.query.query;
+
+    if (!searchQuery) {
+        return res.status(400).json({ error: "Search query is required" });
+    }
+
+    const sql = `
+        SELECT p.id, p.user_id, p.type, p.content, p.created_at, 
+               u.f_name, u.username, u.profile_picture 
+        FROM posts p
+        JOIN users u ON p.user_id = u.id
+        WHERE p.content LIKE ? 
+        ORDER BY p.created_at DESC
+        LIMIT 20;
+    `;
+
+    db.query(sql, [`%${searchQuery}%`], (err, results) => {
+        if (err) {
+            console.error("Error searching posts:", err);
+            return res.status(500).json({ error: "Database error" });
+        }
+
+        res.json(results);
+    });
+});
+
+app.get("/profile/:id", async (req, res) => {
     res.sendFile(path.join(__dirname, "user_profile.html"));
 });
 
@@ -323,7 +349,6 @@ app.get("/api/profile/:id", async (req, res) => {
     }
 });
 
-
 // Helper function for database queries (assuming you're using MySQL)
 function queryDB(sql, params) {
     return new Promise((resolve, reject) => {
@@ -334,16 +359,37 @@ function queryDB(sql, params) {
     });
 }
 
-
 // ✅ Logout Route
 app.get("/logout", (req, res) => {
     req.session.destroy(() => res.redirect("/login"));
 });
 
 // ✅ Signup Route
-app.post("/signup", (req, res) => {
-    // Signup logic remains unchanged
+app.post('/', (req, res) => {
+    const { f_name, username, email, password, confirm_password } = req.body;
+
+    // Check if username is provided
+    if (!username) {
+        return res.status(400).send('<script>alert("Username is required!"); window.location.href="/";</script>');
+    }
+
+    // Password validation
+    if (password !== confirm_password) {
+        return res.status(400).send('<script>alert("Passwords do not match!"); window.location.href="/";</script>');
+    }
+
+    // Insert into database
+    const insertUserQuery = "INSERT INTO users (f_name, username, email, password) VALUES (?, ?, ?, ?)";
+    db.query(insertUserQuery, [f_name, username, email, password], (err, result) => {
+        if (err) {
+            console.error("Error inserting user:", err.sqlMessage || err);
+            return res.status(500).send(`<script>alert("Signup failed: ${err.sqlMessage || err}"); window.location.href="/";</script>`);
+        }
+        res.send('<script>alert("Signup successful!"); window.location.href="/login";</script>');
+    });
 });
+
+
 
 app.post("/comments", requireAuth, (req, res) => {
     const { post_id, content } = req.body;
@@ -396,6 +442,67 @@ app.delete("/comments/:id", requireAuth, (req, res) => {
     });
 });
 
+// ✅ Change Password Route
+app.post("/api/settings/change-password", requireAuth, (req, res) => {
+    const { current_password, new_password } = req.body;
+    const userId = req.session.user.id;
+
+    if (!current_password || !new_password) {
+        return res.status(400).json({ error: "Current and new passwords are required." });
+    }
+
+    // Fetch the user's current password from the database
+    db.query("SELECT password FROM users WHERE id = ?", [userId], (err, results) => {
+        if (err) {
+            console.error("Database error:", err);
+            return res.status(500).json({ error: "Database error" });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        const currentPasswordFromDB = results[0].password;
+
+        // Compare the provided current password with the stored password
+        if (current_password !== currentPasswordFromDB) {
+            return res.status(401).json({ error: "Current password is incorrect" });
+        }
+
+        // Update the user's password in the database
+        db.query("UPDATE users SET password = ? WHERE id = ?", [new_password, userId], (err) => {
+            if (err) {
+                console.error("Error updating password:", err);
+                return res.status(500).json({ error: "Database error" });
+            }
+
+            res.json({ message: "Password updated successfully!" });
+        });
+    });
+});
+
+// ✅ Delete Account Route
+app.post("/api/settings/delete-account", requireAuth, (req, res) => {
+    const userId = req.session.user.id;
+
+    // Delete the user from the database
+    db.query("DELETE FROM users WHERE id = ?", [userId], (err) => {
+        if (err) {
+            console.error("Error deleting account:", err);
+            return res.status(500).json({ error: "Database error" });
+        }
+
+        // Destroy the session
+        req.session.destroy((err) => {
+            if (err) {
+                console.error("Error destroying session:", err);
+                return res.status(500).json({ error: "Server error" });
+            }
+
+            res.json({ message: "Account deleted successfully!" });
+        });
+    });
+});
 
 // ✅ Start Server
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

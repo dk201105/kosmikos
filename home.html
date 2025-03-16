@@ -115,7 +115,7 @@
                     const username = document.createElement("a");
                     username.href = `/profile/${post.user_id}`;
                     username.classList.add("post-username");
-                    username.textContent = post.username;
+                    username.textContent = post.f_name || post.username;
 
                     // Append profile pic and username
                     postHeader.appendChild(profilePic);
