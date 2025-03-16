@@ -51,7 +51,6 @@ const requireAuth = (req, res, next) => {
     next();
 };
 
-
 // ✅ Protected Routes
 app.get("/home", requireAuth, (req, res) => res.sendFile(path.join(__dirname, "home.html")));
 app.get("/about-us", requireAuth, (req, res) => res.sendFile(path.join(__dirname, "about_us.html")));
@@ -61,7 +60,6 @@ app.get("/profile", requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, "profile.html"));  // If stored in 'views' folder
 });
 app.get("/settings", (req, res) => res.sendFile(path.join(__dirname, "settings.html")));
-
 
 // ✅ Login Route (Unchanged)
 app.post("/login", (req, res) => {
@@ -87,7 +85,6 @@ app.post("/login", (req, res) => {
         } else {
             res.status(401).send('<script>alert("Invalid Email or Password"); window.location.href="/login";</script>');
         }
-        
     });
 });
 
@@ -131,8 +128,7 @@ app.get("/api/user", requireAuth, (req, res) => {
     });
 });
 
-
-
+// ✅ Update User Profile
 app.post("/api/user/update", requireAuth, upload.single("profile_picture"), (req, res) => {
     const { f_name, bio } = req.body;
     const userId = req.session.user.id;
@@ -215,11 +211,13 @@ app.post("/post/text", requireAuth, (req, res) => {
     }
 
     const sql = "INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)";
-    db.query(sql, [req.session.user.id, "text", content], (err) => {
+    console.log("User ID:", req.session.user ? req.session.user.id : "No user session");
+    db.query(sql, [req.session.user.id, "text", content], (err, result) => {
         if (err) {
             console.error("Database error:", err);
             return res.status(500).json({ error: "Database insert failed" });
         }
+        console.log("Insert success:", result);  // Debugging line
         res.status(201).json({ message: "Text post added successfully" });
     });
 });
@@ -236,6 +234,7 @@ app.post("/post/image", requireAuth, upload.single("file"), (req, res) => {
     });
 });
 
+// ✅ Route to Post Video (Now Linked to User)
 app.post("/post/video", requireAuth, upload.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Video file is required" });
 
@@ -247,6 +246,7 @@ app.post("/post/video", requireAuth, upload.single("file"), (req, res) => {
     });
 });
 
+// ✅ Route to Post Audio (Now Linked to User)
 app.post("/post/audio", requireAuth, upload.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Audio file is required" });
 
@@ -258,6 +258,7 @@ app.post("/post/audio", requireAuth, upload.single("file"), (req, res) => {
     });
 });
 
+// ✅ Route to Post Link (Now Linked to User)
 app.post("/post/link", requireAuth, (req, res) => {
     const { content } = req.body;
     if (!content) return res.status(400).json({ error: "Link is required" });
@@ -268,7 +269,6 @@ app.post("/post/link", requireAuth, (req, res) => {
         res.status(201).json({ message: "Link post added successfully" });
     });
 });
-
 
 // ✅ Route to Get Posts (Only From Users You Follow)
 app.get("/posts", requireAuth, (req, res) => {
@@ -290,73 +290,77 @@ app.get("/posts", requireAuth, (req, res) => {
     });
 });
 
+// ✅ Follow/Unfollow a User
+app.post("/api/follow", requireAuth, (req, res) => {
+    console.log("Request Body:", req.body);
+    const { userId } = req.body; // ID of the user to follow/unfollow
+    const currentUserId = req.session.user.id; // ID of the logged-in user
 
-// ✅ Follow a User
-app.post("/api/user/follow", async (req, res) => {
-    const { userId } = req.body;
-    const currentUserId = req.session.userId;
+    console.log("Received follow request:", { userId, currentUserId }); // Debugging line
 
-    try {
-        // Check if already following
-        const [check] = await db.execute(
-            "SELECT * FROM followers WHERE follower_id = ? AND following_id = ?",
-            [currentUserId, userId]
-        );
-
-        if (check.length > 0) {
-            // Unfollow
-            await db.execute("DELETE FROM followers WHERE follower_id = ? AND following_id = ?", [currentUserId, userId]);
-            return res.json({ isFollowing: false });
-        } else {
-            // Follow
-            await db.execute("INSERT INTO followers (follower_id, following_id) VALUES (?, ?)", [currentUserId, userId]);
-            return res.json({ isFollowing: true });
-        }
-    } catch (error) {
-        console.error("Database Error:", error);
-        res.status(500).json({ error: "Failed to update follow status" });
+    // Validate userId
+    if (!userId || isNaN(userId)) {
+        console.error("Invalid user ID:", userId);
+        return res.status(400).json({ error: "Invalid user ID" });
     }
-});
 
+    // Check if the current user is already following the target user
+    const checkQuery = "SELECT * FROM followers WHERE follower_id = ? AND following_id = ?";
+    db.query(checkQuery, [currentUserId, userId], (err, results) => {
+        if (err) {
+            console.error("Database error:", err);
+            return res.status(500).json({ error: "Database error" });
+        }
 
-// ✅ Unfollow a User
-app.post("/unfollow", requireAuth, (req, res) => {
-    const { userToUnfollow } = req.body;
-    if (!userToUnfollow) return res.status(400).json({ error: "User ID is required" });
-
-    const sql = "DELETE FROM followers WHERE follower_id = ? AND following_id = ?";
-    db.query(sql, [req.session.user.id, userToUnfollow], (err) => {
-        if (err) return res.status(500).json({ error: "Could not unfollow user" });
-        res.json({ message: "Unfollowed successfully" });
+        if (results.length > 0) {
+            // If already following, unfollow the user
+            const unfollowQuery = "DELETE FROM followers WHERE follower_id = ? AND following_id = ?";
+            db.query(unfollowQuery, [currentUserId, userId], (err) => {
+                if (err) {
+                    console.error("Database error:", err);
+                    return res.status(500).json({ error: "Failed to unfollow user" });
+                }
+                res.json({ message: "Unfollowed successfully", isFollowing: false });
+            });
+        } else {
+            // If not following, follow the user
+            const followQuery = "INSERT INTO followers (follower_id, following_id) VALUES (?, ?)";
+            db.query(followQuery, [currentUserId, userId], (err) => {
+                if (err) {
+                    console.error("Database error:", err);
+                    return res.status(500).json({ error: "Failed to follow user" });
+                }
+                res.json({ message: "Followed successfully", isFollowing: true });
+            });
+        }
     });
 });
 
-// ✅ Get Followers Count
-app.get("/api/user/followers", async (req, res) => {
-    const userId = req.query.user_id;
+// ✅ Get Follower Count
+app.get("/api/followers/:userId", (req, res) => {
+    const { userId } = req.params;
 
-    try {
-        const [result] = await db.execute(
-            `SELECT 
-                (SELECT COUNT(*) FROM followers WHERE following_id = ?) AS followers, 
-                (SELECT COUNT(*) FROM followers WHERE follower_id = ?) AS following,
-                EXISTS(SELECT 1 FROM followers WHERE follower_id = ? AND following_id = ?) AS isFollowing`,
-            [userId, userId, req.session.userId, userId]
-        );
+    const query = `
+        SELECT 
+            (SELECT COUNT(*) FROM followers WHERE following_id = ?) AS followers,
+            (SELECT COUNT(*) FROM followers WHERE follower_id = ?) AS following
+    `;
 
-        res.json(result[0]);
-    } catch (error) {
-        console.error("Database Error:", error);
-        res.status(500).json({ error: "Failed to retrieve follower data" });
-    }
+    db.query(query, [userId, userId], (err, results) => {
+        if (err) {
+            console.error("Database error:", err);
+            return res.status(500).json({ error: "Failed to fetch follower count" });
+        }
+        res.json(results[0]);
+    });
 });
-
 
 // ✅ Logout Route (Unchanged)
 app.get("/logout", (req, res) => {
     req.session.destroy(() => res.redirect("/login"));
 });
 
+// ✅ Signup Route (Unchanged)
 app.post("/signup", (req, res) => {
     const { f_name, username, email, password, confirm_password } = req.body;
 

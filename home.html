@@ -85,20 +85,6 @@
             document.getElementById(formId).classList.toggle('hidden');
         }
 
-        function addComment(postId) {
-        const commentInput = document.getElementById(`comment-input-${postId}`);
-        const commentText = commentInput.value.trim();
-
-        if (commentText) {
-            const commentList = document.getElementById(`comments-list-${postId}`);
-            const newComment = document.createElement("p");
-            newComment.textContent = commentText;
-            commentList.appendChild(newComment);
-
-            commentInput.value = ""; // Clear input field
-        }
-        }   
-
         async function fetchPosts() {
             console.log("Fetching posts...");
 
@@ -120,7 +106,7 @@
                     const postElement = document.createElement("div");
                     postElement.classList.add("post");
 
-                    // Create post header with username and follow button
+                    // Create post header with username, follow button, and follower count
                     const postHeader = document.createElement("div");
                     postHeader.classList.add("post-header");
 
@@ -129,11 +115,16 @@
 
                     const followButton = document.createElement("button");
                     followButton.classList.add("follow-btn");
-                    followButton.textContent = "Follow";
-                    followButton.onclick = () => followUser(post.username);
+                    followButton.textContent = post.isFollowing ? "Unfollow" : "Follow";
+                    followButton.setAttribute("data-user-id", post.userId); // Ensure userId is correctly set
+
+                    const followerCount = document.createElement("p");
+                    followerCount.classList.add("follower-count");
+                    followerCount.textContent = `Followers: ${post.followers || 0}`;
 
                     postHeader.appendChild(username);
                     postHeader.appendChild(followButton);
+                    postHeader.appendChild(followerCount);
                     postElement.appendChild(postHeader);
 
                     // Add post content based on type
@@ -151,30 +142,123 @@
 
                     feed.appendChild(postElement);
                 });
+
+                // Add event listeners to follow buttons
+                document.querySelectorAll(".follow-btn").forEach(button => {
+                    button.addEventListener("click", () => {
+                        const userId = button.getAttribute("data-user-id"); // Extract userId from the button
+                        if (!userId || isNaN(userId)) {
+                            console.error("Invalid user ID:", userId);
+                            return;
+                        }
+                        followUser(userId);
+                    });
+                });
             } catch (error) {
                 console.error("Error fetching posts:", error);
             }
         }
 
-        // Follow user function (placeholder, needs backend support)
-        function followUser(username) {
-            alert(`Following ${username}!`); // Replace with API request later
+        // Function to handle follow/unfollow
+        async function followUser(userId) {
+            console.log("Attempting to follow/unfollow user ID:", userId); // Debugging line
+
+            const followButton = document.querySelector(`.follow-btn[data-user-id="${userId}"]`);
+            if (!followButton) return;
+
+            // Optimistic UI Update (change button instantly)
+            const isFollowing = followButton.textContent === "Unfollow";
+            followButton.textContent = isFollowing ? "Follow" : "Unfollow";
+            followButton.classList.toggle("unfollow");
+
+            try {
+                const response = await fetch("/api/follow", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId: Number(userId) }),
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    alert(result.error || "Failed to follow/unfollow user");
+                    // Revert the button state if the request fails
+                    followButton.textContent = isFollowing ? "Unfollow" : "Follow";
+                    followButton.classList.toggle("unfollow");
+                    return;
+                }
+
+                // Update the follower count dynamically
+                updateFollowerCount(userId);
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Something went wrong. Please try again.");
+                // Revert button state if an error occurs
+                followButton.textContent = isFollowing ? "Unfollow" : "Follow";
+                followButton.classList.toggle("unfollow");
+            }
+        }
+
+        // Function to update the follower count
+        async function updateFollowerCount(userId) {
+            try {
+                const response = await fetch(`/api/followers/${userId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    const followerCountElement = document.querySelector(`.follower-count[data-user-id="${userId}"]`);
+                    if (followerCountElement) {
+                        followerCountElement.textContent = `Followers: ${data.followers}`;
+                    }
+                } else {
+                    console.error("Failed to fetch follower count");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+            }
         }
 
         async function submitPost(type) {
-            let formData = new FormData();
             let content;
 
-            if (type === "text") {
-                content = document.getElementById("text-content").value.trim();
-                formData.append("content", content);
-            } else if (type === "link") {
-                content = document.getElementById("link-content").value.trim();
-                formData.append("content", content);
-            } else {
-                const fileInput = document.getElementById(`${type}-content`);
-                formData.append("file", fileInput.files[0]);
+            // Handle text and link posts
+            if (type === "text" || type === "link") {
+                content = document.getElementById(`${type}-content`).value.trim();
+
+                if (!content) {
+                    alert(`${type.charAt(0).toUpperCase() + type.slice(1)} content cannot be empty!`);
+                    return;
+                }
+
+                const response = await fetch(`/post/${type}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ content })
+                });
+
+                if (response.ok) {
+                    document.getElementById(`${type}-content`).value = ""; // Clear input
+                    fetchPosts(); // Refresh the feed
+                } else {
+                    const errorData = await response.json();
+                    alert("Error: " + errorData.error);
+                }
+
+                return;
             }
+
+            // Handle image, video, and audio posts
+            let formData = new FormData();
+            const fileInput = document.getElementById(`${type}-content`);
+            
+            if (!fileInput.files.length) {
+                alert(`Please select a ${type} file to upload.`);
+                return;
+            }
+
+            formData.append("file", fileInput.files[0]);
 
             const response = await fetch(`/post/${type}`, {
                 method: "POST",
@@ -183,6 +267,8 @@
 
             if (response.ok) {
                 fetchPosts();
+            } else {
+                alert("Error uploading file.");
             }
         }
 

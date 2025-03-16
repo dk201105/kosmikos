@@ -232,9 +232,32 @@ main {
 }
 
 .post p {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 1.1rem;
     line-height: 1.6;
-    color: #000000;
+    color: #ffffff;
+}
+
+.post p a {
+    color: #ff9900;
+    font-weight: bold;
+}
+
+.post p a:hover {
+    color: #e68a00;
+}
+
+a {
+    color: #ff9900 !important; /* Force orange */
+    text-decoration: none; /* Remove underline */
+}
+
+a:hover {
+    color: #e68a00 !important; /* Slightly darker orange on hover */
+}
+
+a:visited {
+    color: #ff9900 !important; /* Ensure visited links stay orange */
 }
 
 .post img {
@@ -244,6 +267,7 @@ main {
     object-fit: cover; /* Prevent distortion */
     border-radius: 5px; /* Optional: rounded corners */
 }
+
 
 
 .post video,
