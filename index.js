@@ -98,8 +98,25 @@ const storage = multer.diskStorage({
     },
 });
 
-const upload = multer({ storage: storage });
-
+const upload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => {
+            cb(null, "uploads/");  // Ensure "uploads" folder exists
+        },
+        filename: (req, file, cb) => {
+            cb(null, Date.now() + path.extname(file.originalname));  // Keep original extension
+        },
+    }),
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = ["audio/mpeg", "audio/wav", "audio/mp3"];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error("Only MP3 and WAV audio files are allowed!"), false);
+        }
+    },
+    limits: { fileSize: 10 * 1024 * 1024 }  // 10MB limit
+});
 // ✅ API to Fetch User Data
 app.get("/api/user", requireAuth, (req, res) => {
     console.log("Session Data:", req.session.user);
@@ -191,20 +208,44 @@ app.post("/post/video", requireAuth, upload.single("file"), (req, res) => {
     });
 });
 
+app.post("/post/audio", requireAuth, upload.single("file"), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: "Audio file is required!" });
+    }
+
+    const audioUrl = `/uploads/${req.file.filename}`;
+
+    db.query(
+        "INSERT INTO posts (user_id, type, content) VALUES (?, 'audio', ?)",
+        [req.session.user.id, audioUrl],
+        (err) => {
+            if (err) {
+                console.error("Database error:", err);
+                return res.status(500).json({ error: "Failed to save audio post" });
+            }
+            res.status(201).json({ message: "Audio uploaded successfully!", url: audioUrl });
+        }
+    );
+});
+
+
 app.post("/post/link", requireAuth, (req, res) => {
     const { content } = req.body;
 
-    if (!content || !content.trim().startsWith("http")) {
-        return res.status(400).json({ error: "A valid link (starting with http) is required!" });
+    if (!content || !/^https?:\/\//.test(content.trim())) {
+        return res.status(400).json({ error: "A valid link (starting with http/https) is required!" });
     }
 
     const sql = "INSERT INTO posts (user_id, type, content) VALUES (?, 'link', ?)";
-    db.query(sql, [req.session.user.id, content.trim()], (err) => {
+    
+    db.query(sql, [req.session.user.id, content.trim()], (err, result) => {
         if (err) {
             console.error("Error inserting link into database:", err);
             return res.status(500).json({ error: "Database error" });
         }
-        res.status(201).json({ message: "Link posted successfully!" });
+
+        console.log("✅ Link posted successfully:", content);
+        res.status(201).json({ message: "Link posted successfully!", link: content });
     });
 });
 
@@ -213,7 +254,7 @@ app.post("/post/link", requireAuth, (req, res) => {
 // ✅ Get Posts
 app.get("/posts", requireAuth, (req, res) => {
     const sql = `
-    SELECT posts.*, users.f_name AS username 
+    SELECT posts.*, users.f_name AS username, users.profile_picture
     FROM posts 
     JOIN users ON posts.user_id = users.id 
     ORDER BY posts.created_at DESC;
@@ -221,6 +262,9 @@ app.get("/posts", requireAuth, (req, res) => {
 
     db.query(sql, (err, results) => {
         if (err) return res.status(500).json({ error: "Database error", details: err });
+
+        console.log("Posts response:", results); // Debugging
+
         res.json(results);
     });
 });

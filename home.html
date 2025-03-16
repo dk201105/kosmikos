@@ -29,7 +29,6 @@
             <button class="post-btn" onclick="toggleForm('image-form')">Image</button>
             <button class="post-btn" onclick="toggleForm('video-form')">Video</button>
             <button class="post-btn" onclick="toggleForm('audio-form')">Audio</button>
-            <button class="post-btn" onclick="toggleForm('link-form')">Link</button>
         </section>
 
         <!-- Post Forms -->
@@ -56,12 +55,6 @@
                 <h3>Upload an Audio File</h3>
                 <input type="file" id="audio-content" accept="audio/*">
                 <button type="button" onclick="submitPost('audio')">Post</button>
-            </form>
-
-            <form id="link-form" class="post-form hidden">
-                <h3>Share a Link</h3>
-                <input type="url" id="link-content" placeholder="Enter URL">
-                <button type="button" onclick="submitPost('link')">Post</button>
             </form>
         </section>
 
@@ -92,7 +85,7 @@
                 const response = await fetch("/posts");
                 const posts = await response.json();
 
-                console.log("Fetched posts:", posts);
+                console.log("Fetched posts:", posts); // Debugging log
 
                 const feed = document.getElementById("posts-feed");
                 feed.innerHTML = "";
@@ -106,29 +99,44 @@
                     const postElement = document.createElement("div");
                     postElement.classList.add("post");
 
-                    // Create post header with username
+                    // Create post header with profile picture & username
                     const postHeader = document.createElement("div");
                     postHeader.classList.add("post-header");
 
-                    const username = document.createElement("h3");
+                    // Profile picture
+                    const profilePic = document.createElement("img");
+                    profilePic.classList.add("post-avatar");
+                    profilePic.src = post.profile_picture && post.profile_picture !== "" 
+                        ? post.profile_picture 
+                        : "/images/default-profile.jpg"; // Fallback image
+                    profilePic.alt = `${post.username}'s profile picture`;
+
+                    // Username (wrapped in link to profile)
+                    const username = document.createElement("a");
+                    username.href = `/profile/${post.user_id}`;
+                    username.classList.add("post-username");
                     username.textContent = post.username;
 
+                    // Append profile pic and username
+                    postHeader.appendChild(profilePic);
                     postHeader.appendChild(username);
                     postElement.appendChild(postHeader);
 
-                    // Add post content based on type
+                    // Add post content
+                    const postContent = document.createElement("div");
+                    postContent.classList.add("post-content");
+
                     if (post.type === "text") {
-                        postElement.innerHTML += `<p>${post.content}</p>`;
+                        postContent.innerHTML = `<p>${post.content}</p>`;
                     } else if (post.type === "image") {
-                        postElement.innerHTML += `<img src="${post.content}" alt="Image" style="max-width:100%;">`;
+                        postContent.innerHTML = `<img src="${post.content}" alt="Image" style="max-width:100%;">`;
                     } else if (post.type === "video") {
-                        postElement.innerHTML += `<video controls style="max-width:100%;"><source src="${post.content}" type="video/mp4"></video>`;
+                        postContent.innerHTML = `<video controls style="max-width:100%;"><source src="${post.content}" type="video/mp4"></video>`;
                     } else if (post.type === "audio") {
-                        postElement.innerHTML += `<audio controls><source src="${post.content}" type="audio/mpeg"></audio>`;
-                    } else if (post.type === "link") {
-                        postElement.innerHTML += `<a href="${post.content}" target="_blank">${post.content}</a>`;
+                        postContent.innerHTML = `<audio controls><source src="${post.content}" type="audio/mpeg"></audio>`;
                     }
 
+                    postElement.appendChild(postContent);
                     feed.appendChild(postElement);
                 });
 
@@ -138,82 +146,33 @@
         }
 
         async function submitPost(type) {
-            let content;
+            let formData = new FormData();
+            const fileInput = document.getElementById(`${type}-content`);
 
-            // Handle text and link posts
             if (type === "text") {
-                content = document.getElementById(`${type}-content`).value.trim();
+                const content = fileInput.value.trim();
 
                 if (!content) {
-                    alert(`${type.charAt(0).toUpperCase() + type.slice(1)} content cannot be empty!`);
+                    alert("Text content cannot be empty!");
                     return;
                 }
 
-                const response = await fetch(`/post/${type}`, {
+                const response = await fetch("/post/text", {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ content })
                 });
 
                 if (response.ok) {
-                    document.getElementById(`${type}-content`).value = ""; // Clear input
-                    fetchPosts(); // Refresh the feed
+                    fileInput.value = ""; // Clear input
+                    fetchPosts();
                 } else {
-                    const errorData = await response.json();
-                    alert("Error: " + errorData.error);
+                    alert("Error posting text.");
                 }
 
                 return;
             }
 
-            if (type === "link") {
-                content = document.getElementById("link-content").value.trim();
-
-                if (!content) {
-                    alert("Link content cannot be empty!");
-                    return;
-                }
-
-                // Validate URL format before posting
-                if (!isValidURL(content)) {
-                    alert("Please enter a valid URL.");
-                    return;
-                }
-
-                try {
-                    console.log(`Posting link: ${content}`); // Debugging log
-
-                    const response = await fetch("/post/link", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({ content })
-                    });
-
-                    const responseData = await response.json();
-                    console.log("Server Response:", responseData); // Debugging log
-
-                    if (response.ok) {
-                        document.getElementById("link-content").value = ""; // Clear input field
-                        fetchPosts(); // Refresh feed
-                    } else {
-                        alert("Error: " + (responseData.error || "Something went wrong!"));
-                    }
-                } catch (error) {
-                    console.error("Network Error:", error);
-                    alert("Failed to post. Please check your connection.");
-                }
-
-                return;
-            }
-
-            // Handle image, video, and audio posts
-            let formData = new FormData();
-            const fileInput = document.getElementById(`${type}-content`);
-            
             if (!fileInput.files.length) {
                 alert(`Please select a ${type} file to upload.`);
                 return;
@@ -231,7 +190,6 @@
             } else {
                 alert("Error uploading file.");
             }
-
         }
 
         document.getElementById("search-input").addEventListener("input", async function () {
@@ -263,7 +221,6 @@
                         <span>${user.f_name}</span>
                     `;
 
-                    // Redirect to profile on click
                     item.addEventListener("click", () => {
                         window.location.href = `/profile/${user.id}`;
                     });
