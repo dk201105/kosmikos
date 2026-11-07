@@ -58,3 +58,36 @@ On a hosting platform instead of your own nginx: set `HOST=0.0.0.0` and
 - `BASE_URL=https://YOUR-DOMAIN npm test` passes
 - Logging in through the browser works and stays logged in.
 - An online TLS checker (e.g. SSL Labs) shows TLS 1.2/1.3 only.
+
+## 3. Backups
+
+`deploy/kosmikos-backup.sh` dumps the database and archives `uploads/`.
+Uploads are not in git, so without this they have no copy at all.
+
+1. Install the script and its database login (the `kosmikos_backup` account from step 1):
+   ```bash
+   sudo install -m 700 deploy/kosmikos-backup.sh /usr/local/bin/kosmikos-backup
+   sudo mkdir -p /etc/kosmikos
+   printf '[client]\nuser=kosmikos_backup\npassword=BACKUP_PASSWORD\n' | sudo tee /etc/kosmikos/backup.cnf >/dev/null
+   sudo chmod 600 /etc/kosmikos/backup.cnf
+   ```
+2. Run daily at 03:17 (`/etc/cron.d/kosmikos-backup`):
+   ```
+   17 3 * * * root /usr/local/bin/kosmikos-backup >> /var/log/kosmikos-backup.log 2>&1
+   ```
+3. **Copy `/var/backups/kosmikos` to another machine or cloud storage.** A backup
+   on the same disk is lost with it.
+
+Settings (environment variables): `APP_DIR` (default `/srv/kosmikos`), `DEST`
+(`/var/backups/kosmikos`), `KEEP_DAYS` (`14`). Each run stores a full copy of
+`uploads/`, so disk use is about uploads size × `KEEP_DAYS`. Check free space.
+
+**Check:**
+- `sudo /usr/local/bin/kosmikos-backup` prints two file names; `ls -l /var/backups/kosmikos` shows them as `-rw-------`.
+- Restore into a scratch database and compare counts (do this monthly):
+  ```bash
+  sudo mysql -e "CREATE DATABASE kosmikos_restore_test"
+  gunzip -c /var/backups/kosmikos/db_LATEST.sql.gz | sudo mysql kosmikos_restore_test
+  sudo mysql -e "SELECT COUNT(*) FROM kosmikos.users; SELECT COUNT(*) FROM kosmikos_restore_test.users"
+  sudo mysql -e "DROP DATABASE kosmikos_restore_test"
+  ```
