@@ -318,6 +318,60 @@ const upload = {
     audio: uploaderFor("audio"),
 };
 
+// ---------- Upload limits ----------
+// Per user: at most UPLOAD_MAX_PER_HOUR files. Overall: refuse uploads when the
+// disk is nearly full, so uploads can never take the database down with it.
+const UPLOAD_WINDOW_MS = 60 * 60 * 1000;
+const UPLOAD_MAX_PER_HOUR = Number(process.env.UPLOAD_MAX_PER_HOUR) || 30;
+const MIN_FREE_DISK_BYTES = (Number(process.env.MIN_FREE_DISK_MB) || 500) * 1024 * 1024;
+const uploadCounts = new Map(); // userId -> { count, first }
+
+function uploadEntry(userId) {
+    let entry = uploadCounts.get(userId);
+    if (!entry || Date.now() - entry.first > UPLOAD_WINDOW_MS) {
+        entry = { count: 0, first: Date.now() };
+        uploadCounts.set(userId, entry);
+    }
+    return entry;
+}
+
+const overUploadLimit = (req) => uploadEntry(req.session.user.id).count >= UPLOAD_MAX_PER_HOUR;
+const uploadLimitResponse = (res) => res.status(429).json({ error: "Upload limit reached. Try again later." });
+
+// Runs before multer, so nothing is written to disk. Routes where the file is
+// optional (profile update) skip the per-user check here; countUpload does it.
+const checkUploadQuota = (fileRequired) => async (req, res, next) => {
+    if (fileRequired && overUploadLimit(req)) return uploadLimitResponse(res);
+    try {
+        const { bavail, bsize } = await fs.promises.statfs(UPLOAD_DIR);
+        if (bavail * bsize < MIN_FREE_DISK_BYTES) {
+            console.error("Uploads refused: disk almost full");
+            return res.status(507).json({ error: "Uploads are temporarily unavailable." });
+        }
+    } catch (err) {
+        console.error("Could not check free disk space:", err.message);
+    }
+    next();
+};
+
+// Runs after multer: only requests that actually stored a file count.
+function countUpload(req, res, next) {
+    if (!req.file) return next();
+    if (overUploadLimit(req)) {
+        fs.promises.unlink(req.file.path).catch(() => {});
+        return uploadLimitResponse(res);
+    }
+    uploadEntry(req.session.user.id).count++;
+    next();
+}
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, entry] of uploadCounts) {
+        if (now - entry.first > UPLOAD_WINDOW_MS) uploadCounts.delete(id);
+    }
+}, UPLOAD_WINDOW_MS).unref();
+
 // ---------- Current user ----------
 const DEFAULT_PROFILE_PIC = "/images/default_profile_pic.jpg";
 
@@ -337,7 +391,7 @@ app.get("/api/user", requireApiAuth, async (req, res) => {
     }
 });
 
-app.post("/api/user/update", requireApiAuth, upload.image.single("profile_picture"), async (req, res) => {
+app.post("/api/user/update", requireApiAuth, checkUploadQuota(false), upload.image.single("profile_picture"), countUpload, async (req, res) => {
     const { f_name, bio } = req.body;
     if (!f_name) return res.status(400).json({ error: "Name is required" });
 
@@ -379,7 +433,7 @@ app.post("/post/text", requireApiAuth, (req, res) => {
 });
 
 for (const kind of ["image", "video", "audio"]) {
-    app.post(`/post/${kind}`, requireApiAuth, upload[kind].single("file"), (req, res) => {
+    app.post(`/post/${kind}`, requireApiAuth, checkUploadQuota(true), upload[kind].single("file"), countUpload, (req, res) => {
         if (!req.file) return res.status(400).json({ error: `${kind} file is required` });
         const url = `/uploads/${req.file.filename}`;
         insertPost(req, res, kind, url, `${kind[0].toUpperCase() + kind.slice(1)} post added successfully`, { url });
