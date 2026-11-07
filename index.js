@@ -32,8 +32,8 @@ app.use(helmet({
         useDefaults: false,
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],  // pages use inline <script>
-            scriptSrcAttr: ["'unsafe-inline'"],        // home.html uses onclick="..."
+            scriptSrc: ["'self'"],                     // scripts only from our own .js files
+            scriptSrcAttr: ["'none'"],                 // no onclick="..." attributes
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:"],                // data: = profile picture preview
             mediaSrc: ["'self'"],
@@ -65,7 +65,7 @@ const UPLOAD_DIR = path.join(__dirname, "uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // Client-side scripts that the pages load.
-for (const file of ["profile.js", "settings.js"]) {
+for (const file of ["profile.js", "settings.js", "home.js", "user_profile.js"]) {
     app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
 }
 
@@ -282,9 +282,13 @@ const requireApiAuth = (req, res, next) => {
 // a message ever contains user input.
 const jsString = (v) => JSON.stringify(String(v)).replace(/</g, "\\u003c");
 
+// The site's CSP blocks inline scripts, so this one-line page gets its own
+// policy that allows exactly this script (by a random nonce) and nothing else.
 function alertAndRedirect(res, status, message, location) {
+    const nonce = crypto.randomBytes(16).toString("base64");
+    res.setHeader("Content-Security-Policy", `default-src 'none'; script-src 'nonce-${nonce}'; frame-ancestors 'none'`);
     res.status(status).type("html").send(
-        `<script>alert(${jsString(message)}); window.location.href=${jsString(location)};</script>`
+        `<script nonce="${nonce}">alert(${jsString(message)}); window.location.href=${jsString(location)};</script>`
     );
 }
 
