@@ -273,9 +273,13 @@ const requireApiAuth = (req, res, next) => {
 };
 
 // Small helper for the alert-and-redirect responses used by the HTML forms.
+// JSON.stringify doesn't escape "</script>", so escape "<" too: safe even if
+// a message ever contains user input.
+const jsString = (v) => JSON.stringify(String(v)).replace(/</g, "\\u003c");
+
 function alertAndRedirect(res, status, message, location) {
-    res.status(status).send(
-        `<script>alert(${JSON.stringify(message)}); window.location.href=${JSON.stringify(location)};</script>`
+    res.status(status).type("html").send(
+        `<script>alert(${jsString(message)}); window.location.href=${jsString(location)};</script>`
     );
 }
 
@@ -406,6 +410,7 @@ function uploaderFor(kind) {
             if (types[file.mimetype]) return cb(null, true);
             const err = new Error(`Only ${kind} files (${Object.values(types).join(", ")}) are allowed`);
             err.status = 400;
+            err.publicMessage = true;   // our own message, safe to show
             cb(err);
         },
     });
@@ -706,15 +711,28 @@ app.post("/api/settings/delete-account", requireApiAuth, async (req, res) => {
 app.use((req, res) => res.status(404).type("text").send("Not found"));
 
 // ---------- Errors ----------
+// Users only ever see short, fixed messages; details go to the server log.
+const MULTER_MESSAGES = {
+    LIMIT_FILE_SIZE: "File is larger than 10MB",
+    LIMIT_FILE_COUNT: "Only one file per upload",
+    LIMIT_UNEXPECTED_FILE: "Unexpected file field",
+};
+
 app.use((err, req, res, next) => {
-    if (err instanceof multer.MulterError || err.status === 400) {
+    if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: MULTER_MESSAGES[err.code] || "Invalid upload" });
+    }
+    if (err.publicMessage) {
         return res.status(400).json({ error: err.message });
+    }
+    if (err.type === "entity.parse.failed") {
+        return res.status(400).json({ error: "Invalid request body" });
     }
     if (err.type === "entity.too.large") {
         return res.status(413).json({ error: "Request too large" });
     }
     console.error("Unhandled error:", err);
-    res.status(500).json({ error: "Server error" });
+    res.status(err.status >= 400 && err.status < 500 ? err.status : 500).json({ error: "Request failed" });
 });
 
 // Only reachable from this machine by default (i.e. through nginx).
