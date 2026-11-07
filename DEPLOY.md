@@ -151,3 +151,40 @@ instead (`ssh -L 3306:127.0.0.1:3306 you@server`).
 - `sudo mysql -e "SHOW VARIABLES WHERE Variable_name IN ('bind_address','local_infile')"` shows `127.0.0.1` and `OFF`.
 - `sudo ss -ltn | grep 3306` shows `127.0.0.1:3306`, not `0.0.0.0` or `*`.
 - `npm test` passes.
+
+## 7. Run as its own user with tight file permissions
+
+The app runs as user `kosmikos`, can't modify its own code, and can only
+write to `uploads/`. Other users on the server can't read `.env` or uploads.
+
+1. Create the user and install the code **without `.git`**:
+   ```bash
+   sudo useradd --system --home /srv/kosmikos --shell /usr/sbin/nologin kosmikos
+   sudo mkdir -p /srv/kosmikos && git archive main | sudo tar -x -C /srv/kosmikos
+   cd /srv/kosmikos && sudo npm ci --omit=dev
+   ```
+   Put `.env` in `/srv/kosmikos/` and copy existing uploads into `/srv/kosmikos/uploads/`.
+2. Permissions:
+   ```bash
+   sudo chown -R root:kosmikos /srv/kosmikos
+   sudo find /srv/kosmikos -type d -exec chmod 750 {} +
+   sudo find /srv/kosmikos -type f -exec chmod 640 {} +
+   sudo chown -R kosmikos:kosmikos /srv/kosmikos/uploads
+   sudo chmod 750 /srv/kosmikos/uploads
+   ```
+3. Service: check `which node` matches `ExecStart` in `deploy/kosmikos.service`
+   (change the path if not), then:
+   ```bash
+   sudo cp deploy/kosmikos.service /etc/systemd/system/
+   sudo systemd-analyze verify /etc/systemd/system/kosmikos.service
+   sudo systemctl daemon-reload && sudo systemctl enable --now kosmikos
+   ```
+
+The app's `.env` stays readable by the app (group `kosmikos`). Anything you
+add later that writes files outside `uploads/` needs its own `ReadWritePaths`.
+
+**Check:**
+- `systemctl status kosmikos` is active; `npm test` passes.
+- `sudo -u kosmikos touch /srv/kosmikos/x` → Permission denied.
+- `sudo -u nobody cat /srv/kosmikos/.env` → Permission denied.
+- A newly uploaded file is `-rw-r-----` owned by `kosmikos`.

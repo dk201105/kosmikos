@@ -1,0 +1,25 @@
+# /etc/systemd/system/kosmikos.service — see DEPLOY.md, step 7.
+[Unit]
+Description=Kosmikos
+After=network.target mysql.service mariadb.service
+
+[Service]
+User=kosmikos
+Group=kosmikos
+WorkingDirectory=/srv/kosmikos
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=5
+
+# New files (uploads) readable by the app's group only.
+UMask=0027
+# Sandboxing: the app can only write to uploads/.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/kosmikos/uploads
+
+[Install]
+WantedBy=multi-user.target
