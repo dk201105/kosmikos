@@ -1,0 +1,8 @@
+# MySQL / MariaDB hardening for Kosmikos. See DEPLOY.md, step 6.
+# MySQL:   /etc/mysql/mysql.conf.d/zz-kosmikos.cnf
+# MariaDB: /etc/mysql/mariadb.conf.d/99-kosmikos.cnf
+[mysqld]
+# Only accept connections from this machine (the app and nginx are local).
+bind-address = 127.0.0.1
+# Don't let SQL read files from the client machine.
+local_infile = 0

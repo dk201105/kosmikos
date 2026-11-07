@@ -133,3 +133,21 @@ To rotate the session secret without logging everyone out: `SESSION_SECRET=new,o
 **Check:**
 - Log in, restart the app, reload the page: still logged in.
 - Log in on two browsers, change the password in one: the other is logged out.
+
+## 6. MySQL settings
+
+`deploy/mysql-kosmikos.cnf`: only local connections, no `LOAD DATA LOCAL`.
+
+```bash
+sudo cp deploy/mysql-kosmikos.cnf /etc/mysql/mariadb.conf.d/99-kosmikos.cnf   # MariaDB
+# or: sudo cp deploy/mysql-kosmikos.cnf /etc/mysql/mysql.conf.d/zz-kosmikos.cnf  # MySQL
+sudo systemctl restart mariadb    # or: mysql
+```
+
+If you use a database GUI from your own computer, connect through an SSH tunnel
+instead (`ssh -L 3306:127.0.0.1:3306 you@server`).
+
+**Check:**
+- `sudo mysql -e "SHOW VARIABLES WHERE Variable_name IN ('bind_address','local_infile')"` shows `127.0.0.1` and `OFF`.
+- `sudo ss -ltn | grep 3306` shows `127.0.0.1:3306`, not `0.0.0.0` or `*`.
+- `npm test` passes.
