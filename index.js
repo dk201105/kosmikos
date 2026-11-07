@@ -62,14 +62,6 @@ app.use(express.static(path.join(__dirname, "styles")));
 
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-app.use("/uploads", express.static(UPLOAD_DIR, {
-    dotfiles: "deny",
-    setHeaders: (res) => {
-        // Stop browsers from guessing a different type (e.g. treating a file as HTML).
-        res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Content-Security-Policy", "default-src 'none'; media-src 'self'; img-src 'self'; style-src 'unsafe-inline'");
-    },
-}));
 
 // Client-side scripts that the pages load.
 for (const file of ["profile.js", "settings.js"]) {
@@ -190,6 +182,22 @@ app.use((req, res, next) => {
     }
     next();
 });
+
+// ---------- Uploaded files (logged-in users only) ----------
+app.use("/uploads", (req, res, next) => {
+    if (!req.session.user) return res.status(401).type("text").send("Log in to view this file");
+    next();
+}, express.static(UPLOAD_DIR, {
+    dotfiles: "deny",
+    cacheControl: false,
+    setHeaders: (res) => {
+        // Browser may cache it, shared proxies may not.
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        // Stop browsers from guessing a different type (e.g. treating a file as HTML).
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Content-Security-Policy", "default-src 'none'; media-src 'self'; img-src 'self'; style-src 'unsafe-inline'");
+    },
+}));
 
 // ---------- CSRF protection ----------
 // Reject state-changing requests that come from another website.

@@ -80,6 +80,8 @@ const imageUrl = r.data.url;
 if (imageUrl) {
     const img = await a.req("GET", imageUrl);
     check("uploaded image is served", img.status === 200 && img.headers.get("content-type") === "image/png", img.status);
+    const anonImg = await anon.req("GET", imageUrl);
+    check("uploaded image needs login", anonImg.status === 401, anonImg.status);
 }
 const bad = new FormData(); bad.append("file", new Blob(["<script>alert(1)</script>"], { type: "text/html" }), "x.html");
 r = await a.req("POST", "/post/image", { multipart: bad });
