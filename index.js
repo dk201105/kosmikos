@@ -14,7 +14,15 @@ const PORT = process.env.PORT || 5000;
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 app.disable("x-powered-by");
-if (IS_PRODUCTION) app.set("trust proxy", 1);
+// Which proxies may set X-Forwarded-For / X-Forwarded-Proto. Default: in
+// production, only a proxy on this machine (nginx); otherwise none. On a
+// hosting platform whose proxy is elsewhere, set TRUST_PROXY (e.g. "1").
+const TRUST_PROXY = process.env.TRUST_PROXY;
+app.set("trust proxy",
+    TRUST_PROXY === undefined ? (IS_PRODUCTION ? "loopback" : false)
+    : /^\d+$/.test(TRUST_PROXY) ? Number(TRUST_PROXY)
+    : TRUST_PROXY === "false" ? false
+    : TRUST_PROXY);
 
 // ---------- Static files ----------
 // Only these folders are public. The project root (source code, .git,
@@ -152,21 +160,25 @@ const MIN_PASSWORD_LENGTH = 8;
 
 // ---------- Login rate limiting ----------
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_FAILURES = 10;
+const LOGIN_MAX_FAILURES = 10;             // per IP + email
+const LOGIN_MAX_FAILURES_PER_EMAIL = 50;   // per email from any IP (stops IP rotation)
 const loginFailures = new Map(); // key -> { count, first }
 
-function loginKey(req, email) {
-    return `${req.ip}|${String(email || "").toLowerCase()}`;
+function loginKeys(req, email) {
+    const e = String(email || "").toLowerCase();
+    return [[`ip|${req.ip}|${e}`, LOGIN_MAX_FAILURES], [`email|${e}`, LOGIN_MAX_FAILURES_PER_EMAIL]];
 }
 
-function isLoginBlocked(key) {
-    const entry = loginFailures.get(key);
-    if (!entry) return false;
-    if (Date.now() - entry.first > LOGIN_WINDOW_MS) {
-        loginFailures.delete(key);
-        return false;
-    }
-    return entry.count >= LOGIN_MAX_FAILURES;
+function isLoginBlocked(keys) {
+    return keys.some(([key, max]) => {
+        const entry = loginFailures.get(key);
+        if (!entry) return false;
+        if (Date.now() - entry.first > LOGIN_WINDOW_MS) {
+            loginFailures.delete(key);
+            return false;
+        }
+        return entry.count >= max;
+    });
 }
 
 function recordLoginFailure(key) {
@@ -251,8 +263,8 @@ app.post("/login", async (req, res) => {
         return alertAndRedirect(res, 400, "Please enter email and password", "/login");
     }
 
-    const key = loginKey(req, email);
-    if (isLoginBlocked(key)) {
+    const keys = loginKeys(req, email);
+    if (isLoginBlocked(keys)) {
         return alertAndRedirect(res, 429, "Too many failed attempts. Try again in 15 minutes.", "/login");
     }
 
@@ -264,10 +276,10 @@ app.post("/login", async (req, res) => {
             : { ok: false, needsRehash: false };
 
         if (!ok) {
-            recordLoginFailure(key);
+            for (const [key] of keys) recordLoginFailure(key);
             return alertAndRedirect(res, 401, "Invalid Email or Password", "/login");
         }
-        loginFailures.delete(key);
+        loginFailures.delete(keys[0][0]);
 
         if (needsRehash) {
             try {
@@ -583,4 +595,7 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: "Server error" });
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+// Only reachable from this machine by default (i.e. through nginx).
+// On a hosting platform that requires it, set HOST=0.0.0.0.
+const HOST = process.env.HOST || "127.0.0.1";
+app.listen(PORT, HOST, () => console.log(`Server running on http://${HOST}:${PORT}`));

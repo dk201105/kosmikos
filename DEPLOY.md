@@ -25,3 +25,36 @@ The old root password is in this repository's git history, so treat it as public
 - `mysql -u root -p` with the **old** password is rejected.
 - `npm test` passes (the app works on the restricted account).
 - `mysql -u kosmikos_app -p kosmikos -e "DROP TABLE comments"` is **denied**.
+
+## 2. HTTPS with nginx
+
+The app itself only speaks HTTP and now listens on `127.0.0.1` only, so nginx
+in front of it handles HTTPS. Config: `deploy/nginx-kosmikos.conf`.
+
+1. Replace `kosmikos.example` with your domain in a copy of the config:
+   ```bash
+   sudo cp deploy/nginx-kosmikos.conf /etc/nginx/sites-available/kosmikos
+   sudo sed -i 's/kosmikos.example/YOUR-DOMAIN/g' /etc/nginx/sites-available/kosmikos
+   sudo ln -s /etc/nginx/sites-available/kosmikos /etc/nginx/sites-enabled/
+   ```
+   - nginx 1.25.1 or newer: change `listen 443 ssl http2;` to `listen 443 ssl;` and add `http2 on;`.
+   - No IPv6 on the server: delete the two `listen [::]...` lines.
+2. Get a certificate (the HTTP block serves the challenge):
+   ```bash
+   sudo mkdir -p /var/www/certbot
+   sudo certbot certonly --webroot -w /var/www/certbot -d YOUR-DOMAIN
+   ```
+3. `sudo nginx -t && sudo systemctl reload nginx`
+4. In `.env` set `NODE_ENV=production`, then restart the app.
+   **Only after HTTPS works**: in production the login cookie is HTTPS-only.
+
+On a hosting platform instead of your own nginx: set `HOST=0.0.0.0` and
+`TRUST_PROXY` to what the platform documents (often `1`).
+
+**Check:**
+- `curl -I http://YOUR-DOMAIN/login` → `301` to `https://`
+- `curl -I https://YOUR-DOMAIN/login` shows `strict-transport-security`
+- `curl -I http://YOUR-SERVER-IP:5000/login` from another machine **fails** to connect
+- `BASE_URL=https://YOUR-DOMAIN npm test` passes
+- Logging in through the browser works and stays logged in.
+- An online TLS checker (e.g. SSL Labs) shows TLS 1.2/1.3 only.
