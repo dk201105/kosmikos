@@ -8,7 +8,7 @@ const { hashPassword, isHashed } = require("../passwords");
 
 try { process.loadEnvFile(path.join(__dirname, "..", ".env")); } catch { /* no .env */ }
 const DRY_RUN = process.argv.includes("--dry-run");
-const MIN_COLUMN_LENGTH = 170; // a hash is 168 characters
+const MIN_COLUMN_LENGTH = 190; // hashes are up to ~185 characters
 
 (async () => {
     const db = await mysql.createConnection({

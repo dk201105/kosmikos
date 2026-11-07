@@ -97,7 +97,7 @@ Settings (environment variables): `APP_DIR` (default `/srv/kosmikos`), `DEST`
 Accounts created before hashing was added keep a plain-text password until
 that user next logs in. This hashes all of them now.
 
-1. Back up the users table, and make sure the column fits a hash (168 characters):
+1. Back up the users table, and make sure the column fits a hash (up to ~185 characters):
    ```bash
    sudo mysqldump kosmikos users > /root/users-before-hash.sql
    sudo mysql kosmikos -e "ALTER TABLE users MODIFY password VARCHAR(255) NOT NULL"

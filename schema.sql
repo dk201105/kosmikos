@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     f_name VARCHAR(100) NOT NULL,
     username VARCHAR(100) NOT NULL UNIQUE,
     email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,  -- scrypt hash, ~170 characters
+    password VARCHAR(255) NOT NULL,  -- scrypt hash, up to ~185 characters
     bio TEXT,
     profile_picture VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
