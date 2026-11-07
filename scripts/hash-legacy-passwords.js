@@ -6,6 +6,10 @@ const path = require("path");
 const mysql = require("mysql2/promise");
 const { hashPassword, isHashed } = require("../passwords");
 
+if (typeof process.loadEnvFile !== "function") {
+    console.error(`Node ${process.version} is too old: Kosmikos needs Node 20.12 or newer (to read .env).`);
+    process.exit(1);
+}
 try { process.loadEnvFile(path.join(__dirname, "..", ".env")); } catch { /* no .env */ }
 const DRY_RUN = process.argv.includes("--dry-run");
 const MIN_COLUMN_LENGTH = 190; // hashes are up to ~185 characters

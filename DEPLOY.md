@@ -4,6 +4,54 @@ Steps for the server that runs the site. Each step says how to check it worked.
 `npm test` runs an end-to-end check against a running server
 (`BASE_URL=https://your-domain npm test`); it creates and deletes a throwaway account.
 
+## Deployment order
+
+The numbered steps below are ordered by importance. To set up a server, do
+them in this order. Assumes Ubuntu 22.04/24.04, a domain whose DNS A record
+points at the server, and `sudo` access. Replace `YOUR-DOMAIN` throughout.
+
+1. **Firewall**, so only SSH and the web are reachable:
+   ```bash
+   sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw enable
+   ```
+2. **Software.** The app needs Node 20.12+; Ubuntu's own `nodejs` package is too
+   old, so use NodeSource:
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+   sudo apt install -y nodejs mariadb-server nginx certbot git
+   node -v   # must be v20.12 or newer
+   ```
+3. **Database.**
+   - New site: `sudo mysql < schema.sql`
+   - Moving an existing site: on the old machine `mysqldump -u root -p kosmikos > kosmikos.sql`,
+     copy it over, then
+     ```bash
+     sudo mysql -e "CREATE DATABASE kosmikos" && sudo mysql kosmikos < kosmikos.sql
+     sudo mysql kosmikos -e "ALTER TABLE users MODIFY password VARCHAR(255) NOT NULL"
+     sed -n '/CREATE TABLE IF NOT EXISTS sessions/,/);/p' schema.sql | sudo mysql kosmikos
+     ```
+4. **Database accounts**: step 1 below.
+5. **Code, app user, permissions, `.env`**: step 7, parts 1 and 2. In `.env` set
+   `DB_USER=kosmikos_app`, its password, and a `SESSION_SECRET` (leave `NODE_ENV`
+   out: the service sets it). Copy existing uploads into `/srv/kosmikos/uploads/`.
+6. **HTTPS**: step 2, parts 1-4.
+7. **Start the app**: step 7, part 3.
+8. **Existing users**: step 4 (hash leftover plain-text passwords), run from `/srv/kosmikos`.
+9. **MySQL settings** (step 6) and **backups** (step 3).
+10. **Check everything**: `BASE_URL=https://YOUR-DOMAIN npm test`, then log in with a browser.
+
+### Updating to a new version later
+
+```bash
+cd ~/kosmikos && git pull                         # your clone of the repo
+git archive main | sudo tar -x -C /srv/kosmikos   # .env and uploads/ are not in git, so they're kept
+cd /srv/kosmikos && sudo npm ci --omit=dev
+sudo chown -R root:kosmikos /srv/kosmikos && sudo chown -R kosmikos:kosmikos /srv/kosmikos/uploads
+sudo find /srv/kosmikos -path /srv/kosmikos/uploads -prune -o -type f -exec chmod 640 {} +
+sudo systemctl restart kosmikos
+BASE_URL=https://YOUR-DOMAIN npm test
+```
+
 ## 1. Change the leaked database password and stop using root
 
 The old root password is in this repository's git history, so treat it as public.
@@ -31,21 +79,29 @@ The old root password is in this repository's git history, so treat it as public
 The app itself only speaks HTTP and now listens on `127.0.0.1` only, so nginx
 in front of it handles HTTPS. Config: `deploy/nginx-kosmikos.conf`.
 
-1. Replace `kosmikos.example` with your domain in a copy of the config:
-   ```bash
-   sudo cp deploy/nginx-kosmikos.conf /etc/nginx/sites-available/kosmikos
-   sudo sed -i 's/kosmikos.example/YOUR-DOMAIN/g' /etc/nginx/sites-available/kosmikos
-   sudo ln -s /etc/nginx/sites-available/kosmikos /etc/nginx/sites-enabled/
-   ```
-   - nginx 1.25.1 or newer: change `listen 443 ssl http2;` to `listen 443 ssl;` and add `http2 on;`.
-   - No IPv6 on the server: delete the two `listen [::]...` lines.
-2. Get a certificate (the HTTP block serves the challenge):
+Your domain's DNS must already point at the server, and ports 80 and 443 must be open.
+
+1. Install nginx and certbot: `sudo apt install nginx certbot`
+2. **First the HTTP part only** (the full config refers to a certificate that doesn't exist yet):
    ```bash
    sudo mkdir -p /var/www/certbot
+   sed -n '1,/^}/p' deploy/nginx-kosmikos.conf | sed 's/kosmikos.example/YOUR-DOMAIN/g' | sudo tee /etc/nginx/sites-available/kosmikos >/dev/null
+   sudo ln -s /etc/nginx/sites-available/kosmikos /etc/nginx/sites-enabled/
+   sudo rm -f /etc/nginx/sites-enabled/default
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+3. Get the certificate (renewals reuse the same HTTP block automatically):
+   ```bash
    sudo certbot certonly --webroot -w /var/www/certbot -d YOUR-DOMAIN
    ```
-3. `sudo nginx -t && sudo systemctl reload nginx`
-4. In `.env` set `NODE_ENV=production`, then restart the app.
+4. **Now the full config**:
+   ```bash
+   sed 's/kosmikos.example/YOUR-DOMAIN/g' deploy/nginx-kosmikos.conf | sudo tee /etc/nginx/sites-available/kosmikos >/dev/null
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+   - nginx 1.25.1 or newer: change `listen 443 ssl http2;` to `listen 443 ssl;` and add `http2 on;`.
+   - No IPv6 on the server: delete the `listen [::]...` lines.
+5. In `.env` set `NODE_ENV=production`, then restart the app.
    **Only after HTTPS works**: in production the login cookie is HTTPS-only.
 
 On a hosting platform instead of your own nginx: set `HOST=0.0.0.0` and

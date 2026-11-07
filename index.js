@@ -8,6 +8,10 @@ const multer = require("multer");
 const helmet = require("helmet");
 const { contentMatchesType } = require("./uploadcheck");
 
+if (typeof process.loadEnvFile !== "function") {
+    console.error(`Node ${process.version} is too old: Kosmikos needs Node 20.12 or newer (to read .env).`);
+    process.exit(1);
+}
 // Load settings from a local .env file if there is one (see .env.example).
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch { /* no .env file */ }
 
