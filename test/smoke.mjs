@@ -87,6 +87,9 @@ if (imageUrl) {
 const bad = new FormData(); bad.append("file", new Blob(["<script>alert(1)</script>"], { type: "text/html" }), "x.html");
 r = await a.req("POST", "/post/image", { multipart: bad });
 check("non-image upload rejected", r.status === 400, r.status);
+const fake = new FormData(); fake.append("file", new Blob(["<html><script>alert(1)</script>"], { type: "image/png" }), "fake.png");
+r = await a.req("POST", "/post/image", { multipart: fake });
+check("HTML disguised as PNG rejected", r.status === 400, r.status);
 
 r = await a.req("GET", "/posts");
 const mine = Array.isArray(r.data) ? r.data.filter(p => p.content === `smoke text ${id}`) : [];

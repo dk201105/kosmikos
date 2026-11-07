@@ -6,6 +6,7 @@ const mysql = require("mysql2");
 const session = require("express-session");
 const multer = require("multer");
 const helmet = require("helmet");
+const { contentMatchesType } = require("./uploadcheck");
 
 // Load settings from a local .env file if there is one (see .env.example).
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch { /* no .env file */ }
@@ -479,11 +480,35 @@ const checkUploadQuota = (fileRequired) => async (req, res, next) => {
     next();
 };
 
+// Delete files under uploads/ (by their /uploads/... URL). Never touches
+// anything outside the folder.
+function deleteUploads(urls) {
+    for (const url of urls) {
+        if (typeof url !== "string" || !url.startsWith("/uploads/")) continue;
+        const name = path.basename(url);
+        if (!name || name.startsWith(".")) continue;
+        fs.promises.unlink(path.join(UPLOAD_DIR, name)).catch(() => {});
+    }
+}
+const discardUpload = (req) => { if (req.file) deleteUploads([`/uploads/${req.file.filename}`]); };
+
+// Runs after multer: the file's first bytes must match the claimed type.
+async function verifyUpload(req, res, next) {
+    if (!req.file) return next();
+    try {
+        if (await contentMatchesType(req.file.path, req.file.mimetype)) return next();
+    } catch (err) {
+        console.error("Could not read upload:", err.message);
+    }
+    discardUpload(req);
+    res.status(400).json({ error: "The file's contents don't match its type" });
+}
+
 // Runs after multer: only requests that actually stored a file count.
 function countUpload(req, res, next) {
     if (!req.file) return next();
     if (overUploadLimit(req)) {
-        fs.promises.unlink(req.file.path).catch(() => {});
+        discardUpload(req);
         return uploadLimitResponse(res);
     }
     uploadEntry(req.session.user.id).count++;
@@ -516,11 +541,15 @@ app.get("/api/user", requireApiAuth, async (req, res) => {
     }
 });
 
-app.post("/api/user/update", requireApiAuth, checkUploadQuota(false), upload.image.single("profile_picture"), countUpload, async (req, res) => {
+app.post("/api/user/update", requireApiAuth, checkUploadQuota(false), upload.image.single("profile_picture"), verifyUpload, countUpload, async (req, res) => {
     const f_name = text(req.body.f_name, LIMITS.name);
     const bio = req.body.bio === undefined ? "" : text(req.body.bio, LIMITS.bio);
-    if (!f_name) return res.status(400).json({ error: `Name is required (up to ${LIMITS.name} characters)` });
-    if (bio === null) return res.status(400).json({ error: `Bio can be up to ${LIMITS.bio} characters` });
+    if (!f_name || bio === null) {
+        discardUpload(req);
+        return res.status(400).json({ error: !f_name
+            ? `Name is required (up to ${LIMITS.name} characters)`
+            : `Bio can be up to ${LIMITS.bio} characters` });
+    }
 
     const profilePicPath = req.file ? `/uploads/${req.file.filename}` : null;
     let sql = "UPDATE users SET f_name = ?, bio = ?";
@@ -533,10 +562,15 @@ app.post("/api/user/update", requireApiAuth, checkUploadQuota(false), upload.ima
     params.push(req.session.user.id);
 
     try {
+        const [old] = profilePicPath
+            ? await queryDB("SELECT profile_picture FROM users WHERE id = ?", [req.session.user.id])
+            : [];
         await queryDB(sql, params);
+        if (old) deleteUploads([old.profile_picture]); // replaced picture
         req.session.user.f_name = f_name;
         res.json({ message: "Profile updated successfully!", profilePicPath });
     } catch (err) {
+        discardUpload(req);
         console.error("Profile update failed:", err.message);
         res.status(500).json({ error: "Database update failed" });
     }
@@ -548,6 +582,7 @@ async function insertPost(req, res, type, content, okMessage, extra = {}) {
         await queryDB("INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)", [req.session.user.id, type, content]);
         res.status(201).json({ message: okMessage, ...extra });
     } catch (err) {
+        discardUpload(req);
         console.error(`Error saving ${type} post:`, err.message);
         res.status(500).json({ error: "Database error" });
     }
@@ -560,7 +595,7 @@ app.post("/post/text", requireApiAuth, (req, res) => {
 });
 
 for (const kind of ["image", "video", "audio"]) {
-    app.post(`/post/${kind}`, requireApiAuth, checkUploadQuota(true), upload[kind].single("file"), countUpload, (req, res) => {
+    app.post(`/post/${kind}`, requireApiAuth, checkUploadQuota(true), upload[kind].single("file"), verifyUpload, countUpload, (req, res) => {
         if (!req.file) return res.status(400).json({ error: `${kind} file is required` });
         const url = `/uploads/${req.file.filename}`;
         insertPost(req, res, kind, url, `${kind[0].toUpperCase() + kind.slice(1)} post added successfully`, { url });
@@ -728,7 +763,12 @@ app.post("/api/settings/delete-account", requireApiAuth, async (req, res) => {
         if (!(await checkCurrentPassword(req.session.user.id, password))) {
             return res.status(401).json({ error: "Password is incorrect" });
         }
+        // Collect the user's files before the rows disappear.
+        const files = await queryDB(
+            `SELECT content AS url FROM posts WHERE user_id = ? AND type IN ('image', 'video', 'audio')
+             UNION SELECT profile_picture FROM users WHERE id = ?`, [req.session.user.id, req.session.user.id]);
         await queryDB("DELETE FROM users WHERE id = ?", [req.session.user.id]);
+        deleteUploads(files.map((f) => f.url));
         req.session.destroy((err) => {
             if (err) console.error("Error destroying session:", err.message);
             res.clearCookie(SESSION_COOKIE, { path: "/" });
