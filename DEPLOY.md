@@ -114,3 +114,22 @@ that user next logs in. This hashes all of them now.
 - `sudo mysql kosmikos -e "SELECT COUNT(*) FROM users WHERE password NOT LIKE 'scrypt\$%'"` prints `0`.
 - An existing user can still log in with their usual password.
 - Once that's confirmed, delete `/root/users-before-hash.sql` (it contains the plain-text passwords).
+
+## 5. Sessions table
+
+Logins are stored in MySQL (they used to be in memory and were lost on every
+restart). The app refuses to start until the table exists.
+
+1. Create it (copy the `CREATE TABLE IF NOT EXISTS sessions` statement from `schema.sql`):
+   ```bash
+   sed -n '/CREATE TABLE IF NOT EXISTS sessions/,/);/p' schema.sql | sudo mysql kosmikos
+   ```
+2. Deploy the new code and restart. **Everyone is logged out once** (new cookie name).
+
+Inactive users are logged out after `SESSION_IDLE_MINUTES` (default 120), and
+everyone after 7 days. Changing a password logs out the user's other devices.
+To rotate the session secret without logging everyone out: `SESSION_SECRET=new,old`.
+
+**Check:**
+- Log in, restart the app, reload the page: still logged in.
+- Log in on two browsers, change the password in one: the other is logged out.

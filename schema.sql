@@ -33,5 +33,16 @@ CREATE TABLE IF NOT EXISTS comments (
     FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
 );
 
+-- Logged-in sessions (used by the session store in index.js)
+CREATE TABLE IF NOT EXISTS sessions (
+    sid VARCHAR(128) PRIMARY KEY,
+    user_id INT NULL,
+    data MEDIUMTEXT NOT NULL,
+    expires DATETIME NOT NULL,
+    INDEX idx_expires (expires),
+    INDEX idx_user (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Existing install: passwords are now stored hashed, which needs a longer column.
 -- ALTER TABLE users MODIFY password VARCHAR(255) NOT NULL;

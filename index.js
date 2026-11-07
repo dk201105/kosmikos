@@ -87,43 +87,6 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ extended: false, limit: "100kb" }));
 app.use(express.json({ limit: "100kb" }));
 
-// ---------- Sessions ----------
-let sessionSecret = process.env.SESSION_SECRET;
-if (!sessionSecret) {
-    if (IS_PRODUCTION) {
-        console.error("SESSION_SECRET must be set in production.");
-        process.exit(1);
-    }
-    sessionSecret = crypto.randomBytes(32).toString("hex");
-    console.warn("SESSION_SECRET not set: using a random one (everyone is logged out on restart).");
-}
-
-app.use(session({
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        httpOnly: true,
-        sameSite: "lax",          // cookie is not sent on cross-site POSTs
-        secure: IS_PRODUCTION,    // HTTPS-only cookie in production
-        maxAge: 1000 * 60 * 60 * 24 * 7,
-    },
-}));
-
-// ---------- CSRF protection ----------
-// Reject state-changing requests that come from another website.
-app.use((req, res, next) => {
-    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
-    const source = req.get("origin") || req.get("referer");
-    if (!source) return next(); // non-browser clients; the SameSite cookie still applies
-    let sourceHost;
-    try { sourceHost = new URL(source).host; } catch { sourceHost = null; }
-    if (sourceHost !== req.get("host")) {
-        return res.status(403).json({ error: "Cross-site request blocked" });
-    }
-    next();
-});
-
 // ---------- Database ----------
 for (const name of ["DB_USER", "DB_NAME"]) {
     if (!process.env[name]) console.warn(`${name} is not set; see .env.example`);
@@ -152,6 +115,95 @@ function queryDB(sql, params = []) {
         db.query(sql, params, (err, results) => (err ? reject(err) : resolve(results)));
     });
 }
+
+// ---------- Sessions ----------
+// Stored in MySQL (table `sessions`, see schema.sql): they survive restarts,
+// expire on their own, and can be revoked per user.
+class MySQLSessionStore extends session.Store {
+    constructor(pool) {
+        super();
+        this.pool = pool;
+        setInterval(() => pool.query("DELETE FROM sessions WHERE expires < NOW()", () => {}), 15 * 60 * 1000).unref();
+    }
+    get(sid, cb) {
+        this.pool.query("SELECT data FROM sessions WHERE sid = ? AND expires > NOW()", [sid], (err, rows) => {
+            if (err) return cb(err);
+            if (!rows.length) return cb(null, null);
+            try { cb(null, JSON.parse(rows[0].data)); } catch (e) { cb(e); }
+        });
+    }
+    set(sid, sess, cb) {
+        this.pool.query(
+            "REPLACE INTO sessions (sid, user_id, data, expires) VALUES (?, ?, ?, ?)",
+            [sid, sess.user ? sess.user.id : null, JSON.stringify(sess), new Date(sess.cookie.expires)],
+            (err) => cb && cb(err));
+    }
+    touch(sid, sess, cb) {
+        this.pool.query("UPDATE sessions SET expires = ? WHERE sid = ?", [new Date(sess.cookie.expires), sid], (err) => cb && cb(err));
+    }
+    destroy(sid, cb) {
+        this.pool.query("DELETE FROM sessions WHERE sid = ?", [sid], (err) => cb && cb(err));
+    }
+}
+
+// Without the table every request would fail, so refuse to start instead.
+db.query("SELECT 1 FROM sessions LIMIT 1", (err) => {
+    if (err && err.code === "ER_NO_SUCH_TABLE") {
+        console.error("The sessions table is missing. Create it with the CREATE TABLE sessions statement in schema.sql.");
+        process.exit(1);
+    }
+});
+
+const SESSION_COOKIE = IS_PRODUCTION ? "__Host-kosmikos.sid" : "kosmikos.sid";
+const SESSION_IDLE_MS = (Number(process.env.SESSION_IDLE_MINUTES) || 120) * 60 * 1000;
+const SESSION_MAX_MS = 7 * 24 * 60 * 60 * 1000;   // log in again after 7 days regardless
+let sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+    if (IS_PRODUCTION) {
+        console.error("SESSION_SECRET must be set in production.");
+        process.exit(1);
+    }
+    sessionSecret = crypto.randomBytes(32).toString("hex");
+    console.warn("SESSION_SECRET not set: using a random one (everyone is logged out on restart).");
+}
+
+app.use(session({
+    name: SESSION_COOKIE,
+    secret: sessionSecret.split(","),   // to rotate: SESSION_SECRET=new,old
+    store: new MySQLSessionStore(db),
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,                      // inactivity timer restarts on each request
+    cookie: {
+        httpOnly: true,
+        sameSite: "lax",                // not sent on cross-site POSTs
+        secure: IS_PRODUCTION,          // HTTPS-only in production
+        path: "/",
+        maxAge: SESSION_IDLE_MS,
+    },
+}));
+
+// Absolute session lifetime.
+app.use((req, res, next) => {
+    if (req.session.user && Date.now() - (req.session.createdAt || 0) > SESSION_MAX_MS) {
+        return req.session.regenerate(() => next());
+    }
+    next();
+});
+
+// ---------- CSRF protection ----------
+// Reject state-changing requests that come from another website.
+app.use((req, res, next) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+    const source = req.get("origin") || req.get("referer");
+    if (!source) return next(); // non-browser clients; the SameSite cookie still applies
+    let sourceHost;
+    try { sourceHost = new URL(source).host; } catch { sourceHost = null; }
+    if (sourceHost !== req.get("host")) {
+        return res.status(403).json({ error: "Cross-site request blocked" });
+    }
+    next();
+});
 
 // ---------- Password hashing (see passwords.js) ----------
 const { hashPassword, verifyPassword } = require("./passwords");
@@ -299,6 +351,7 @@ app.post("/login", async (req, res) => {
                 return alertAndRedirect(res, 500, "Server Error. Try again!", "/login");
             }
             req.session.user = { id: user.id, f_name: user.f_name, email: user.email };
+            req.session.createdAt = Date.now();
             res.redirect("/profile");
         });
     } catch (err) {
@@ -310,7 +363,7 @@ app.post("/login", async (req, res) => {
 // ---------- Logout ----------
 app.get("/logout", (req, res) => {
     req.session.destroy(() => {
-        res.clearCookie("connect.sid");
+        res.clearCookie(SESSION_COOKIE, { path: "/" });
         res.redirect("/login");
     });
 });
@@ -613,6 +666,8 @@ app.post("/api/settings/change-password", requireApiAuth, async (req, res) => {
             return res.status(401).json({ error: "Current password is incorrect" });
         }
         await queryDB("UPDATE users SET password = ? WHERE id = ?", [await hashPassword(new_password), req.session.user.id]);
+        // Log out every other device.
+        await queryDB("DELETE FROM sessions WHERE user_id = ? AND sid <> ?", [req.session.user.id, req.sessionID]);
         res.json({ message: "Password updated successfully!" });
     } catch (err) {
         console.error("Error updating password:", err.message);
@@ -630,7 +685,7 @@ app.post("/api/settings/delete-account", requireApiAuth, async (req, res) => {
         await queryDB("DELETE FROM users WHERE id = ?", [req.session.user.id]);
         req.session.destroy((err) => {
             if (err) console.error("Error destroying session:", err.message);
-            res.clearCookie("connect.sid");
+            res.clearCookie(SESSION_COOKIE, { path: "/" });
             res.json({ message: "Account deleted successfully!" });
         });
     } catch (err) {
