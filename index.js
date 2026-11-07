@@ -120,6 +120,10 @@ function queryDB(sql, params = []) {
 // ---------- Password hashing (see passwords.js) ----------
 const { hashPassword, verifyPassword } = require("./passwords");
 
+// Checked when the email doesn't exist, so a wrong email takes as long as a
+// wrong password (otherwise response time reveals which emails have accounts).
+const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString("hex"));
+
 const MIN_PASSWORD_LENGTH = 8;
 
 // ---------- Login rate limiting ----------
@@ -235,11 +239,9 @@ app.post("/login", async (req, res) => {
     try {
         const results = await queryDB("SELECT id, f_name, email, password FROM users WHERE email = ?", [email]);
         const user = results[0];
-        const { ok, needsRehash } = user
-            ? await verifyPassword(password, user.password)
-            : { ok: false, needsRehash: false };
+        const { ok, needsRehash } = await verifyPassword(password, user ? user.password : await DUMMY_HASH);
 
-        if (!ok) {
+        if (!user || !ok) {
             for (const [key] of keys) recordLoginFailure(key);
             return alertAndRedirect(res, 401, "Invalid Email or Password", "/login");
         }
