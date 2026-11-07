@@ -78,6 +78,26 @@
             document.getElementById(formId).classList.toggle('hidden');
         }
 
+        // Escape text before putting it into HTML so user content can't run scripts.
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        }
+
+        // Only allow links/media that point at our uploads or at http(s) URLs.
+        function safeUrl(value) {
+            const url = String(value ?? "");
+            if (url.startsWith("/uploads/")) return url;
+            try {
+                const parsed = new URL(url, window.location.origin);
+                if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+            } catch (e) { /* invalid */ }
+            return "#";
+        }
+
+        const DEFAULT_PROFILE_PIC = "/images/default_profile_pic.jpg";
+
         async function fetchPosts() {
             console.log("Fetching posts...");
 
@@ -108,8 +128,8 @@
                     profilePic.classList.add("post-avatar");
                     profilePic.src = post.profile_picture && post.profile_picture !== "" 
                         ? post.profile_picture 
-                        : "/images/default-profile.jpg"; // Fallback image
-                    profilePic.alt = `${post.username}'s profile picture`;
+                        : DEFAULT_PROFILE_PIC; // Fallback image
+                    profilePic.alt = `${post.f_name || "User"}'s profile picture`;
 
                     // Username (wrapped in link to profile)
                     const username = document.createElement("a");
@@ -126,34 +146,39 @@
                     const postContent = document.createElement("div");
                     postContent.classList.add("post-content");
 
+                    const content = escapeHtml(post.content);
+                    const src = escapeHtml(safeUrl(post.content));
                     if (post.type === "text") {
-                        postContent.innerHTML = `<p>${post.content}</p>`;
+                        postContent.innerHTML = `<p>${content}</p>`;
                     } else if (post.type === "image") {
-                        postContent.innerHTML = `<img src="${post.content}" alt="Image" style="max-width:100%;">`;
+                        postContent.innerHTML = `<img src="${src}" alt="Image" style="max-width:100%;">`;
                     } else if (post.type === "video") {
-                        postContent.innerHTML = `<video controls style="max-width:100%;"><source src="${post.content}" type="video/mp4"></video>`;
+                        postContent.innerHTML = `<video controls style="max-width:100%;" src="${src}"></video>`;
                     } else if (post.type === "audio") {
-                        postContent.innerHTML = `<audio controls><source src="${post.content}" type="audio/mpeg"></audio>`;
+                        postContent.innerHTML = `<audio controls src="${src}"></audio>`;
+                    } else if (post.type === "link") {
+                        postContent.innerHTML = `<a href="${src}" target="_blank" rel="noopener noreferrer">${content}</a>`;
                     }
 
                     postElement.appendChild(postContent);
                     
                     const commentsSection = document.createElement("div");
                     commentsSection.classList.add("comments-section");
-                    commentsSection.id = `comments-${post.id}`;
+                    const postId = Number(post.id);
+                    commentsSection.id = `comments-${postId}`;
 
                     commentsSection.innerHTML = `
                         <h4>Comments</h4>
-                        <div class="comments-list" id="comments-list-${post.id}"></div>
+                        <div class="comments-list" id="comments-list-${postId}"></div>
                         <div class="search-bar">
-                            <input type="text" id="comment-input-${post.id}" placeholder="Write a comment...">
-                            <button onclick="submitComment(${post.id})">Comment</button>
+                            <input type="text" id="comment-input-${postId}" placeholder="Write a comment...">
+                            <button onclick="submitComment(${postId})">Comment</button>
                         </div>
                     `;
 
                     // Append comments section
                     postElement.appendChild(commentsSection);
-                    fetchComments(post.id);
+                    fetchComments(postId);
                     feed.appendChild(postElement);
                 });
 
@@ -197,7 +222,7 @@
                     const commentElement = document.createElement("div");
                     commentElement.classList.add("comment");
                     commentElement.innerHTML = `
-                        <strong>${comment.username}</strong>: ${comment.content}
+                        <strong>${escapeHtml(comment.username)}</strong>: ${escapeHtml(comment.content)}
                     `;
                     commentsList.appendChild(commentElement);
                 });
@@ -287,7 +312,7 @@
             }
 
             try {
-                const response = await fetch(`/search/users?query=${query}`);
+                const response = await fetch(`/search/users?query=${encodeURIComponent(query)}`);
                 const users = await response.json();
 
                 if (users.length === 0) {
@@ -300,12 +325,12 @@
                     item.classList.add("result-item");
 
                     item.innerHTML = `
-                        <img src="${user.profile_picture || '/images/default-profile.jpg'}" alt="Profile">
-                        <span>${user.f_name}</span>
+                        <img src="${escapeHtml(user.profile_picture ? safeUrl(user.profile_picture) : DEFAULT_PROFILE_PIC)}" alt="Profile">
+                        <span>${escapeHtml(user.f_name)}</span>
                     `;
 
                     item.addEventListener("click", () => {
-                        window.location.href = `/profile/${user.id}`;
+                        window.location.href = `/profile/${encodeURIComponent(user.id)}`;
                     });
 
                     resultsContainer.appendChild(item);

@@ -39,3 +39,16 @@ Frontend 🎨
 HTML, CSS, JavaScript – Interactive and responsive UI
 
 AJAX & Fetch API – Enables real-time content updates
+
+
+## ⚙️ Running locally
+
+1. Install dependencies: `npm install`
+2. Create the database: `mysql -u root -p < schema.sql`
+   - Already have the database? Run this once so hashed passwords fit:
+     `ALTER TABLE users MODIFY password VARCHAR(255) NOT NULL;`
+3. Copy `.env.example` to `.env` and fill in your database password and a `SESSION_SECRET`.
+4. Start the server: `npm start`, then open http://localhost:5000
+
+Passwords are stored as scrypt hashes. Accounts created before this change still
+log in with their old password, which is hashed automatically on first login.

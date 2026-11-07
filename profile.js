@@ -6,14 +6,14 @@ document.addEventListener("DOMContentLoaded", async function () {
         // Populate profile fields
         document.getElementById("user-name").value = user.f_name;
         document.getElementById("bio").value = user.bio || "";
-        document.getElementById("profile-img").src = user.profile_picture || "images/default-profile.jpg";
+        document.getElementById("profile-img").src = user.profile_picture || "/images/default_profile_pic.jpg";
 
         // Populate display section
         document.getElementById("display-user-name").innerText = user.f_name;
         document.getElementById("display-bio").innerText = user.bio || "No bio added.";
-        document.getElementById("display-profile-img").src = user.profile_picture || "images/default-profile.jpg";
+        document.getElementById("display-profile-img").src = user.profile_picture || "/images/default_profile_pic.jpg";
         document.getElementById("settings-btn").addEventListener("click", function() {
-            window.location.href = "/settings.html"; // ✅ Navigates to the settings page
+            window.location.href = "/settings"; // ✅ Navigates to the settings page
         });
         
         // Fetch followers & following count

@@ -1,508 +1,586 @@
-const express = require('express');
-const path = require('path');
-const bodyParser = require("body-parser");
+const express = require("express");
+const path = require("path");
+const crypto = require("crypto");
+const fs = require("fs");
 const mysql = require("mysql2");
-const nodemailer = require("nodemailer");
 const session = require("express-session");
 const multer = require("multer");
 
+// Load settings from a local .env file if there is one (see .env.example).
+try { process.loadEnvFile(path.join(__dirname, ".env")); } catch { /* no .env file */ }
+
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
-app.use(express.static(__dirname));
-// Middleware Configuration
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
+app.disable("x-powered-by");
+if (IS_PRODUCTION) app.set("trust proxy", 1);
 
-app.use(express.static(path.join(__dirname, "/images")));
-app.use(express.static(path.join(__dirname, "/styles")));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// ---------- Static files ----------
+// Only these folders are public. The project root (source code, .git,
+// package files, node_modules) is NOT served.
+app.use(express.static(path.join(__dirname, "images")));
+app.use("/images", express.static(path.join(__dirname, "images")));
+app.use(express.static(path.join(__dirname, "styles")));
 
-// Session Middleware
-app.use(session({
-    secret: "your-secret-key",
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }  // Ensure it's set to false in development
+const UPLOAD_DIR = path.join(__dirname, "uploads");
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+app.use("/uploads", express.static(UPLOAD_DIR, {
+    dotfiles: "deny",
+    setHeaders: (res) => {
+        // Stop browsers from guessing a different type (e.g. treating a file as HTML).
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Content-Security-Policy", "default-src 'none'; media-src 'self'; img-src 'self'; style-src 'unsafe-inline'");
+    },
 }));
 
-// Database Connection
-const db = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "divya1111",
-    database: "kosmikos",
+// Client-side scripts that the pages load.
+for (const file of ["profile.js", "settings.js"]) {
+    app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
+}
+
+// ---------- Body parsing ----------
+app.use(express.urlencoded({ extended: false, limit: "100kb" }));
+app.use(express.json({ limit: "100kb" }));
+
+// ---------- Sessions ----------
+let sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+    if (IS_PRODUCTION) {
+        console.error("SESSION_SECRET must be set in production.");
+        process.exit(1);
+    }
+    sessionSecret = crypto.randomBytes(32).toString("hex");
+    console.warn("SESSION_SECRET not set: using a random one (everyone is logged out on restart).");
+}
+
+app.use(session({
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        sameSite: "lax",          // cookie is not sent on cross-site POSTs
+        secure: IS_PRODUCTION,    // HTTPS-only cookie in production
+        maxAge: 1000 * 60 * 60 * 24 * 7,
+    },
+}));
+
+// ---------- CSRF protection ----------
+// Reject state-changing requests that come from another website.
+app.use((req, res, next) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+    const source = req.get("origin") || req.get("referer");
+    if (!source) return next(); // non-browser clients; the SameSite cookie still applies
+    let sourceHost;
+    try { sourceHost = new URL(source).host; } catch { sourceHost = null; }
+    if (sourceHost !== req.get("host")) {
+        return res.status(403).json({ error: "Cross-site request blocked" });
+    }
+    next();
 });
 
-db.connect((err) => {
+// ---------- Database ----------
+for (const name of ["DB_USER", "DB_NAME"]) {
+    if (!process.env[name]) console.warn(`${name} is not set; see .env.example`);
+}
+
+const db = mysql.createPool({
+    host: process.env.DB_HOST || "localhost",
+    port: Number(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    connectionLimit: 10,
+});
+
+db.getConnection((err, conn) => {
     if (err) {
-        console.error("Database connection failed:", err);
+        console.error("Database connection failed:", err.message);
         return;
     }
+    conn.release();
     console.log("MySQL connected");
 });
 
-// ✅ Middleware to Protect Routes
-const requireAuth = (req, res, next) => {
-    console.log('Session user:', req.session.user);  // Log session details
-    if (!req.session.user) {
-        return res.redirect('/login');
-    }
-    next();
-};
-
-// ✅ Protected Routes
-app.get("/home", requireAuth, (req, res) => res.sendFile(path.join(__dirname, "home.html")));
-app.get("/about-us", requireAuth, (req, res) => res.sendFile(path.join(__dirname, "about_us.html")));
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "signup.html")));
-app.get("/login", (req, res) => res.sendFile(path.join(__dirname, "login.html")));
-app.get("/profile", requireAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, "profile.html"));
-});
-app.get("/settings", (req, res) => res.sendFile(path.join(__dirname, "settings.html")));
-
-// ✅ Login Route
-app.post("/login", (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-        return res.status(400).send('<script>alert("Please enter email and password"); window.location.href="/login";</script>');
-    }
-
-    const query = "SELECT * FROM users WHERE email = ? AND password = ?";
-    db.query(query, [email, password], (err, results) => {
-        if (err) {
-            console.error("Error logging in:", err);
-            return res.status(500).send('<script>alert("Server Error. Try again!"); window.location.href="/login";</script>');
-        }
-
-        if (results.length > 0) {
-            req.session.user = {
-                id: results[0].id,
-                f_name: results[0].f_name,
-                email: results[0].email
-            };
-            res.redirect('/profile');
-        } else {
-            res.status(401).send('<script>alert("Invalid Email or Password"); window.location.href="/login";</script>');
-        }
-    });
-});
-
-// ✅ Configure Multer for File Uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, "uploads/");  // Ensure "uploads" folder exists
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));  // Keep original extension
-    },
-});
-
-// File filter to allow only certain types
-const fileFilter = (req, file, cb) => {
-    const allowedTypes = ["image", "video", "audio"];
-    if (allowedTypes.some(type => file.mimetype.startsWith(type))) {
-        cb(null, true);
-    } else {
-        cb(new Error("Only images, videos, and audio files are allowed"), false);
-    }
-};
-
-// Multer upload middleware
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 },  // 10MB limit
-    fileFilter: fileFilter
-});
-
-module.exports = upload;
-
-
-// ✅ API to Fetch User Data
-app.get("/api/user", requireAuth, (req, res) => {
-    console.log("Session Data:", req.session.user);
-
-    if (!req.session.user || !req.session.user.id) {
-        return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const userId = req.session.user.id;
-
-    db.query("SELECT f_name, bio, profile_picture FROM users WHERE id = ?", [userId], (err, results) => {
-        if (err || results.length === 0) {
-            console.error("Failed to fetch user data:", err);
-            return res.status(500).json({ error: "Failed to fetch user data" });
-        }
-
-        const user = results[0];
-
-        console.log("User data from DB:", user);
-
-        res.json({
-            f_name: user.f_name,
-            bio: user.bio || "",
-            profile_picture: user.profile_picture || "/images/default-profile.jpg"
-        });
-    });
-});
-
-// ✅ Update User Profile
-app.post("/api/user/update", requireAuth, upload.single("profile_picture"), (req, res) => {
-    const { f_name, bio } = req.body;
-    const userId = req.session.user.id;
-    let profilePicPath = req.file ? `/uploads/${req.file.filename}` : null;
-
-    let query = "UPDATE users SET f_name = ?, bio = ?";
-    let params = [f_name, bio];
-
-    if (profilePicPath) {
-        query += ", profile_picture = ?";
-        params.push(profilePicPath);
-    }
-
-    query += " WHERE id = ?";
-    params.push(userId);
-
-    db.query(query, params, (err) => {
-        if (err) {
-            console.error("Profile update failed:", err);
-            return res.status(500).json({ error: "Database update failed" });
-        }
-
-        res.json({ message: "Profile updated successfully!", profilePicPath });
-    });
-});
-
-// ✅ Routes to Post Content
-app.post("/post/text", requireAuth, (req, res) => {
-    const { content } = req.body;
-    if (!content) {
-        return res.status(400).json({ error: "Text content is required" });
-    }
-
-    const sql = "INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)";
-    db.query(sql, [req.session.user.id, "text", content], (err) => {
-        if (err) return res.status(500).json({ error: "Database insert failed" });
-        res.status(201).json({ message: "Text post added successfully" });
-    });
-});
-
-app.post("/post/image", requireAuth, upload.single("file"), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "Image file is required" });
-
-    const imageUrl = `/uploads/${req.file.filename}`;
-    db.query("INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)", 
-        [req.session.user.id, "image", imageUrl], (err) => {
-        if (err) return res.status(500).json({ error: "Database error" });
-        res.status(201).json({ message: "Image post added successfully", url: imageUrl });
-    });
-});
-
-app.post("/post/video", requireAuth, upload.single("file"), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "Video file is required" });
-
-    const videoUrl = `/uploads/${req.file.filename}`;
-    db.query("INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)", 
-        [req.session.user.id, "video", videoUrl], (err) => {
-        if (err) return res.status(500).json({ error: "Database error" });
-        res.status(201).json({ message: "Video post added successfully", url: videoUrl });
-    });
-});
-
-app.post("/post/audio", requireAuth, upload.single("file"), (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: "Audio file is required!" });
-    }
-
-    const audioUrl = `/uploads/${req.file.filename}`;
-
-    db.query(
-        "INSERT INTO posts (user_id, type, content) VALUES (?, 'audio', ?)",
-        [req.session.user.id, audioUrl],
-        (err) => {
-            if (err) {
-                console.error("Database error:", err);
-                return res.status(500).json({ error: "Failed to save audio post" });
-            }
-            res.status(201).json({ message: "Audio uploaded successfully!", url: audioUrl });
-        }
-    );
-});
-
-
-app.post("/post/link", requireAuth, (req, res) => {
-    const { content } = req.body;
-
-    if (!content || !/^https?:\/\//.test(content.trim())) {
-        return res.status(400).json({ error: "A valid link (starting with http/https) is required!" });
-    }
-
-    const sql = "INSERT INTO posts (user_id, type, content) VALUES (?, 'link', ?)";
-    
-    db.query(sql, [req.session.user.id, content.trim()], (err, result) => {
-        if (err) {
-            console.error("Error inserting link into database:", err);
-            return res.status(500).json({ error: "Database error" });
-        }
-
-        console.log("✅ Link posted successfully:", content);
-        res.status(201).json({ message: "Link posted successfully!", link: content });
-    });
-});
-
-
-
-// ✅ Get Posts
-app.get('/posts', (req, res) => {
-    const sql = `
-        SELECT p.*, u.f_name, u.profile_picture 
-        FROM posts p 
-        JOIN users u ON p.user_id = u.id 
-        ORDER BY p.created_at DESC
-    `;
-
-    db.query(sql, (err, results) => {
-        if (err) {
-            console.error("Error fetching posts:", err);
-            return res.status(500).json({ error: "Failed to fetch posts" });
-        }
-        console.log("Query Result:", results); // Debugging
-        res.json(results);
-    });
-});
-
-app.get("/search/users", (req, res) => {
-    const searchQuery = req.query.query;
-
-    if (!searchQuery) {
-        return res.status(400).json({ error: "Search query is required" });
-    }
-
-    const sql = `
-        SELECT id, f_name, profile_picture 
-        FROM users 
-        WHERE f_name LIKE ? 
-        LIMIT 10;
-    `;
-
-    db.query(sql, [`%${searchQuery}%`], (err, results) => {
-        if (err) {
-            console.error("Error searching users:", err);
-            return res.status(500).json({ error: "Database error" });
-        }
-
-        res.json(results);
-    });
-});
-
-app.get("/search/posts", (req, res) => {
-    const searchQuery = req.query.query;
-
-    if (!searchQuery) {
-        return res.status(400).json({ error: "Search query is required" });
-    }
-
-    const sql = `
-        SELECT p.id, p.user_id, p.type, p.content, p.created_at, 
-               u.f_name, u.username, u.profile_picture 
-        FROM posts p
-        JOIN users u ON p.user_id = u.id
-        WHERE p.content LIKE ? 
-        ORDER BY p.created_at DESC
-        LIMIT 20;
-    `;
-
-    db.query(sql, [`%${searchQuery}%`], (err, results) => {
-        if (err) {
-            console.error("Error searching posts:", err);
-            return res.status(500).json({ error: "Database error" });
-        }
-
-        res.json(results);
-    });
-});
-
-app.get("/profile/:id", async (req, res) => {
-    res.sendFile(path.join(__dirname, "user_profile.html"));
-});
-
-app.get("/api/profile/:id", async (req, res) => {
-    const userId = req.params.id;
-
-    try {
-        const userQuery = "SELECT id, f_name, profile_picture, bio FROM users WHERE id = ?";
-        const userResult = await queryDB(userQuery, [userId]);
-
-        if (userResult.length === 0) {
-            return res.status(404).json({ error: "User not found" });
-        }
-
-        const user = userResult[0];
-
-        const postsQuery = "SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC";
-        const posts = await queryDB(postsQuery, [userId]);
-
-        res.json({ user, posts });
-    } catch (error) {
-        console.error("Error fetching profile:", error);
-        res.status(500).json({ error: "Server error" });
-    }
-});
-
-// Helper function for database queries (assuming you're using MySQL)
-function queryDB(sql, params) {
+function queryDB(sql, params = []) {
     return new Promise((resolve, reject) => {
-        db.query(sql, params, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
+        db.query(sql, params, (err, results) => (err ? reject(err) : resolve(results)));
+    });
+}
+
+// ---------- Password hashing (scrypt, built into Node) ----------
+const HASH_PREFIX = "scrypt$";
+
+function hashPassword(password) {
+    return new Promise((resolve, reject) => {
+        const salt = crypto.randomBytes(16);
+        crypto.scrypt(password, salt, 64, (err, key) => {
+            if (err) return reject(err);
+            resolve(`${HASH_PREFIX}${salt.toString("hex")}$${key.toString("hex")}`);
         });
     });
 }
 
-// ✅ Logout Route
-app.get("/logout", (req, res) => {
-    req.session.destroy(() => res.redirect("/login"));
-});
+function safeEqual(a, b) {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
 
-// ✅ Signup Route
-app.post('/', (req, res) => {
+// Returns { ok, needsRehash }. Accounts created before hashing was added
+// still hold a plain-text password; those are upgraded on the next login.
+function verifyPassword(password, stored) {
+    return new Promise((resolve, reject) => {
+        if (typeof stored !== "string" || typeof password !== "string") {
+            return resolve({ ok: false, needsRehash: false });
+        }
+        if (!stored.startsWith(HASH_PREFIX)) {
+            return resolve({ ok: safeEqual(password, stored), needsRehash: true });
+        }
+        const [saltHex, keyHex] = stored.slice(HASH_PREFIX.length).split("$");
+        if (!saltHex || !keyHex) return resolve({ ok: false, needsRehash: false });
+        const expected = Buffer.from(keyHex, "hex");
+        crypto.scrypt(password, Buffer.from(saltHex, "hex"), expected.length, (err, key) => {
+            if (err) return reject(err);
+            resolve({ ok: crypto.timingSafeEqual(key, expected), needsRehash: false });
+        });
+    });
+}
+
+const MIN_PASSWORD_LENGTH = 8;
+
+// ---------- Login rate limiting ----------
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 10;
+const loginFailures = new Map(); // key -> { count, first }
+
+function loginKey(req, email) {
+    return `${req.ip}|${String(email || "").toLowerCase()}`;
+}
+
+function isLoginBlocked(key) {
+    const entry = loginFailures.get(key);
+    if (!entry) return false;
+    if (Date.now() - entry.first > LOGIN_WINDOW_MS) {
+        loginFailures.delete(key);
+        return false;
+    }
+    return entry.count >= LOGIN_MAX_FAILURES;
+}
+
+function recordLoginFailure(key) {
+    const entry = loginFailures.get(key);
+    if (!entry || Date.now() - entry.first > LOGIN_WINDOW_MS) {
+        loginFailures.set(key, { count: 1, first: Date.now() });
+    } else {
+        entry.count++;
+    }
+}
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of loginFailures) {
+        if (now - entry.first > LOGIN_WINDOW_MS) loginFailures.delete(key);
+    }
+}, LOGIN_WINDOW_MS).unref();
+
+// ---------- Auth middleware ----------
+const requireAuth = (req, res, next) => {
+    if (!req.session.user) return res.redirect("/login");
+    next();
+};
+
+const requireApiAuth = (req, res, next) => {
+    if (!req.session.user) return res.status(401).json({ error: "Not authenticated" });
+    next();
+};
+
+// Small helper for the alert-and-redirect responses used by the HTML forms.
+function alertAndRedirect(res, status, message, location) {
+    res.status(status).send(
+        `<script>alert(${JSON.stringify(message)}); window.location.href=${JSON.stringify(location)};</script>`
+    );
+}
+
+// ---------- Pages ----------
+const page = (file) => (req, res) => res.sendFile(path.join(__dirname, file));
+
+app.get("/", page("signup.html"));
+app.get("/login", page("login.html"));
+app.get("/home", requireAuth, page("home.html"));
+app.get("/about-us", requireAuth, page("about_us.html"));
+app.get("/profile", requireAuth, page("profile.html"));
+app.get("/settings", requireAuth, page("settings.html"));
+app.get("/profile/:id", requireAuth, page("user_profile.html"));
+
+// ---------- Signup ----------
+app.post("/", async (req, res) => {
     const { f_name, username, email, password, confirm_password } = req.body;
 
-    // Check if username is provided
-    if (!username) {
-        return res.status(400).send('<script>alert("Username is required!"); window.location.href="/";</script>');
+    if (!f_name || !username || !email || !password) {
+        return alertAndRedirect(res, 400, "All fields are required!", "/");
     }
-
-    // Password validation
     if (password !== confirm_password) {
-        return res.status(400).send('<script>alert("Passwords do not match!"); window.location.href="/";</script>');
+        return alertAndRedirect(res, 400, "Passwords do not match!", "/");
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+        return alertAndRedirect(res, 400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, "/");
     }
 
-    // Insert into database
-    const insertUserQuery = "INSERT INTO users (f_name, username, email, password) VALUES (?, ?, ?, ?)";
-    db.query(insertUserQuery, [f_name, username, email, password], (err, result) => {
-        if (err) {
-            console.error("Error inserting user:", err.sqlMessage || err);
-            return res.status(500).send(`<script>alert("Signup failed: ${err.sqlMessage || err}"); window.location.href="/";</script>`);
+    try {
+        const hash = await hashPassword(password);
+        await queryDB(
+            "INSERT INTO users (f_name, username, email, password) VALUES (?, ?, ?, ?)",
+            [f_name, username, email, hash]
+        );
+        alertAndRedirect(res, 200, "Signup successful!", "/login");
+    } catch (err) {
+        if (err.code === "ER_DUP_ENTRY") {
+            return alertAndRedirect(res, 409, "That email or username is already in use.", "/");
         }
-        res.send('<script>alert("Signup successful!"); window.location.href="/login";</script>');
+        console.error("Error inserting user:", err.message);
+        alertAndRedirect(res, 500, "Signup failed. Please try again.", "/");
+    }
+});
+
+// ---------- Login ----------
+app.post("/login", async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return alertAndRedirect(res, 400, "Please enter email and password", "/login");
+    }
+
+    const key = loginKey(req, email);
+    if (isLoginBlocked(key)) {
+        return alertAndRedirect(res, 429, "Too many failed attempts. Try again in 15 minutes.", "/login");
+    }
+
+    try {
+        const results = await queryDB("SELECT id, f_name, email, password FROM users WHERE email = ?", [email]);
+        const user = results[0];
+        const { ok, needsRehash } = user
+            ? await verifyPassword(password, user.password)
+            : { ok: false, needsRehash: false };
+
+        if (!ok) {
+            recordLoginFailure(key);
+            return alertAndRedirect(res, 401, "Invalid Email or Password", "/login");
+        }
+        loginFailures.delete(key);
+
+        if (needsRehash) {
+            try {
+                await queryDB("UPDATE users SET password = ? WHERE id = ?", [await hashPassword(password), user.id]);
+            } catch (err) {
+                // Most likely the password column is too short; see README.
+                console.error("Could not upgrade password hash for user", user.id, "-", err.message);
+            }
+        }
+
+        // New session ID on login (prevents session fixation).
+        req.session.regenerate((err) => {
+            if (err) {
+                console.error("Session error:", err.message);
+                return alertAndRedirect(res, 500, "Server Error. Try again!", "/login");
+            }
+            req.session.user = { id: user.id, f_name: user.f_name, email: user.email };
+            res.redirect("/profile");
+        });
+    } catch (err) {
+        console.error("Error logging in:", err.message);
+        alertAndRedirect(res, 500, "Server Error. Try again!", "/login");
+    }
+});
+
+// ---------- Logout ----------
+app.get("/logout", (req, res) => {
+    req.session.destroy(() => {
+        res.clearCookie("connect.sid");
+        res.redirect("/login");
     });
 });
 
+// ---------- File uploads ----------
+// Only these types are accepted, and the saved file's extension comes from
+// this list - never from the uploaded file's name.
+const ALLOWED_UPLOADS = {
+    image: {
+        "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp",
+    },
+    video: {
+        "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov", "video/ogg": ".ogv",
+    },
+    audio: {
+        "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/wav": ".wav", "audio/x-wav": ".wav",
+        "audio/wave": ".wav", "audio/ogg": ".ogg", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a",
+        "audio/aac": ".aac", "audio/webm": ".weba",
+    },
+};
 
+function uploaderFor(kind) {
+    const types = ALLOWED_UPLOADS[kind];
+    return multer({
+        storage: multer.diskStorage({
+            destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+            filename: (req, file, cb) =>
+                cb(null, `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${types[file.mimetype]}`),
+        }),
+        limits: { fileSize: 10 * 1024 * 1024, files: 1 }, // 10MB
+        fileFilter: (req, file, cb) => {
+            if (types[file.mimetype]) return cb(null, true);
+            const err = new Error(`Only ${kind} files (${Object.values(types).join(", ")}) are allowed`);
+            err.status = 400;
+            cb(err);
+        },
+    });
+}
 
-app.post("/comments", requireAuth, (req, res) => {
-    const { post_id, content } = req.body;
-    const user_id = req.session.user.id;
+const upload = {
+    image: uploaderFor("image"),
+    video: uploaderFor("video"),
+    audio: uploaderFor("audio"),
+};
 
-    if (!post_id || !content) {
-        return res.status(400).json({ error: "Post ID and content are required." });
+// ---------- Current user ----------
+const DEFAULT_PROFILE_PIC = "/images/default_profile_pic.jpg";
+
+app.get("/api/user", requireApiAuth, async (req, res) => {
+    try {
+        const results = await queryDB("SELECT f_name, bio, profile_picture FROM users WHERE id = ?", [req.session.user.id]);
+        if (results.length === 0) return res.status(404).json({ error: "User not found" });
+        const user = results[0];
+        res.json({
+            f_name: user.f_name,
+            bio: user.bio || "",
+            profile_picture: user.profile_picture || DEFAULT_PROFILE_PIC,
+        });
+    } catch (err) {
+        console.error("Failed to fetch user data:", err.message);
+        res.status(500).json({ error: "Failed to fetch user data" });
     }
+});
 
-    const sql = "INSERT INTO comments (user_id, post_id, content) VALUES (?, ?, ?)";
-    db.query(sql, [user_id, post_id, content], (err, result) => {
-        if (err) return res.status(500).json({ error: "Database error", details: err });
+app.post("/api/user/update", requireApiAuth, upload.image.single("profile_picture"), async (req, res) => {
+    const { f_name, bio } = req.body;
+    if (!f_name) return res.status(400).json({ error: "Name is required" });
 
+    const profilePicPath = req.file ? `/uploads/${req.file.filename}` : null;
+    let sql = "UPDATE users SET f_name = ?, bio = ?";
+    const params = [f_name, bio || ""];
+    if (profilePicPath) {
+        sql += ", profile_picture = ?";
+        params.push(profilePicPath);
+    }
+    sql += " WHERE id = ?";
+    params.push(req.session.user.id);
+
+    try {
+        await queryDB(sql, params);
+        req.session.user.f_name = f_name;
+        res.json({ message: "Profile updated successfully!", profilePicPath });
+    } catch (err) {
+        console.error("Profile update failed:", err.message);
+        res.status(500).json({ error: "Database update failed" });
+    }
+});
+
+// ---------- Posts ----------
+async function insertPost(req, res, type, content, okMessage, extra = {}) {
+    try {
+        await queryDB("INSERT INTO posts (user_id, type, content) VALUES (?, ?, ?)", [req.session.user.id, type, content]);
+        res.status(201).json({ message: okMessage, ...extra });
+    } catch (err) {
+        console.error(`Error saving ${type} post:`, err.message);
+        res.status(500).json({ error: "Database error" });
+    }
+}
+
+app.post("/post/text", requireApiAuth, (req, res) => {
+    const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+    if (!content) return res.status(400).json({ error: "Text content is required" });
+    insertPost(req, res, "text", content, "Text post added successfully");
+});
+
+for (const kind of ["image", "video", "audio"]) {
+    app.post(`/post/${kind}`, requireApiAuth, upload[kind].single("file"), (req, res) => {
+        if (!req.file) return res.status(400).json({ error: `${kind} file is required` });
+        const url = `/uploads/${req.file.filename}`;
+        insertPost(req, res, kind, url, `${kind[0].toUpperCase() + kind.slice(1)} post added successfully`, { url });
+    });
+}
+
+app.post("/post/link", requireApiAuth, (req, res) => {
+    const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+    let valid = false;
+    try {
+        valid = ["http:", "https:"].includes(new URL(content).protocol);
+    } catch { /* invalid URL */ }
+    if (!valid) {
+        return res.status(400).json({ error: "A valid link (starting with http/https) is required!" });
+    }
+    insertPost(req, res, "link", content, "Link posted successfully!", { link: content });
+});
+
+app.get("/posts", requireApiAuth, async (req, res) => {
+    try {
+        const posts = await queryDB(`
+            SELECT p.*, u.f_name, u.profile_picture
+            FROM posts p
+            JOIN users u ON p.user_id = u.id
+            ORDER BY p.created_at DESC
+        `);
+        res.json(posts);
+    } catch (err) {
+        console.error("Error fetching posts:", err.message);
+        res.status(500).json({ error: "Failed to fetch posts" });
+    }
+});
+
+// ---------- Search ----------
+// Escape LIKE wildcards so a search for "%" doesn't match everything.
+const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
+
+app.get("/search/users", requireApiAuth, async (req, res) => {
+    const q = typeof req.query.query === "string" ? req.query.query.trim() : "";
+    if (!q) return res.status(400).json({ error: "Search query is required" });
+    try {
+        res.json(await queryDB("SELECT id, f_name, profile_picture FROM users WHERE f_name LIKE ? LIMIT 10", [likePattern(q)]));
+    } catch (err) {
+        console.error("Error searching users:", err.message);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+app.get("/search/posts", requireApiAuth, async (req, res) => {
+    const q = typeof req.query.query === "string" ? req.query.query.trim() : "";
+    if (!q) return res.status(400).json({ error: "Search query is required" });
+    try {
+        res.json(await queryDB(`
+            SELECT p.id, p.user_id, p.type, p.content, p.created_at,
+                   u.f_name, u.username, u.profile_picture
+            FROM posts p
+            JOIN users u ON p.user_id = u.id
+            WHERE p.content LIKE ?
+            ORDER BY p.created_at DESC
+            LIMIT 20
+        `, [likePattern(q)]));
+    } catch (err) {
+        console.error("Error searching posts:", err.message);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+// ---------- Other users' profiles ----------
+app.get("/api/profile/:id", requireApiAuth, async (req, res) => {
+    try {
+        const users = await queryDB("SELECT id, f_name, profile_picture, bio FROM users WHERE id = ?", [req.params.id]);
+        if (users.length === 0) return res.status(404).json({ error: "User not found" });
+        const posts = await queryDB("SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC", [req.params.id]);
+        res.json({ user: users[0], posts });
+    } catch (err) {
+        console.error("Error fetching profile:", err.message);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+// ---------- Comments ----------
+app.post("/comments", requireApiAuth, async (req, res) => {
+    const { post_id } = req.body;
+    const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+    if (!post_id || !content) return res.status(400).json({ error: "Post ID and content are required." });
+    try {
+        const result = await queryDB("INSERT INTO comments (user_id, post_id, content) VALUES (?, ?, ?)",
+            [req.session.user.id, post_id, content]);
         res.json({ message: "Comment added successfully!", comment_id: result.insertId });
-    });
+    } catch (err) {
+        console.error("Error adding comment:", err.message);
+        res.status(500).json({ error: "Database error" });
+    }
 });
 
-
-app.get("/comments/:post_id", (req, res) => {
-    const { post_id } = req.params;
-
-    const sql = `
-    SELECT comments.*, users.f_name AS username, users.profile_picture 
-    FROM comments
-    JOIN users ON comments.user_id = users.id
-    WHERE comments.post_id = ?
-    ORDER BY comments.created_at ASC;
-    `;
-
-    db.query(sql, [post_id], (err, results) => {
-        if (err) return res.status(500).json({ error: "Database error", details: err });
-
-        res.json(results);
-    });
+app.get("/comments/:post_id", requireApiAuth, async (req, res) => {
+    try {
+        res.json(await queryDB(`
+            SELECT comments.*, users.f_name AS username, users.profile_picture
+            FROM comments
+            JOIN users ON comments.user_id = users.id
+            WHERE comments.post_id = ?
+            ORDER BY comments.created_at ASC
+        `, [req.params.post_id]));
+    } catch (err) {
+        console.error("Error fetching comments:", err.message);
+        res.status(500).json({ error: "Database error" });
+    }
 });
 
-app.delete("/comments/:id", requireAuth, (req, res) => {
-    const { id } = req.params;
-    const user_id = req.session.user.id;
-
-    const sql = "DELETE FROM comments WHERE id = ? AND user_id = ?";
-    db.query(sql, [id, user_id], (err, result) => {
-        if (err) return res.status(500).json({ error: "Database error", details: err });
-
-        if (result.affectedRows === 0) {
-            return res.status(403).json({ error: "Unauthorized or comment not found." });
-        }
-
+app.delete("/comments/:id", requireApiAuth, async (req, res) => {
+    try {
+        const result = await queryDB("DELETE FROM comments WHERE id = ? AND user_id = ?", [req.params.id, req.session.user.id]);
+        if (result.affectedRows === 0) return res.status(403).json({ error: "Unauthorized or comment not found." });
         res.json({ message: "Comment deleted successfully!" });
-    });
+    } catch (err) {
+        console.error("Error deleting comment:", err.message);
+        res.status(500).json({ error: "Database error" });
+    }
 });
 
-// ✅ Change Password Route
-app.post("/api/settings/change-password", requireAuth, (req, res) => {
-    const { current_password, new_password } = req.body;
-    const userId = req.session.user.id;
+// ---------- Settings ----------
+async function checkCurrentPassword(userId, password) {
+    const results = await queryDB("SELECT password FROM users WHERE id = ?", [userId]);
+    if (results.length === 0) return false;
+    return (await verifyPassword(password, results[0].password)).ok;
+}
 
+app.post("/api/settings/change-password", requireApiAuth, async (req, res) => {
+    const { current_password, new_password } = req.body;
     if (!current_password || !new_password) {
         return res.status(400).json({ error: "Current and new passwords are required." });
     }
-
-    // Fetch the user's current password from the database
-    db.query("SELECT password FROM users WHERE id = ?", [userId], (err, results) => {
-        if (err) {
-            console.error("Database error:", err);
-            return res.status(500).json({ error: "Database error" });
-        }
-
-        if (results.length === 0) {
-            return res.status(404).json({ error: "User not found" });
-        }
-
-        const currentPasswordFromDB = results[0].password;
-
-        // Compare the provided current password with the stored password
-        if (current_password !== currentPasswordFromDB) {
+    if (new_password.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+    }
+    try {
+        if (!(await checkCurrentPassword(req.session.user.id, current_password))) {
             return res.status(401).json({ error: "Current password is incorrect" });
         }
-
-        // Update the user's password in the database
-        db.query("UPDATE users SET password = ? WHERE id = ?", [new_password, userId], (err) => {
-            if (err) {
-                console.error("Error updating password:", err);
-                return res.status(500).json({ error: "Database error" });
-            }
-
-            res.json({ message: "Password updated successfully!" });
-        });
-    });
+        await queryDB("UPDATE users SET password = ? WHERE id = ?", [await hashPassword(new_password), req.session.user.id]);
+        res.json({ message: "Password updated successfully!" });
+    } catch (err) {
+        console.error("Error updating password:", err.message);
+        res.status(500).json({ error: "Database error" });
+    }
 });
 
-// ✅ Delete Account Route
-app.post("/api/settings/delete-account", requireAuth, (req, res) => {
-    const userId = req.session.user.id;
-
-    // Delete the user from the database
-    db.query("DELETE FROM users WHERE id = ?", [userId], (err) => {
-        if (err) {
-            console.error("Error deleting account:", err);
-            return res.status(500).json({ error: "Database error" });
+app.post("/api/settings/delete-account", requireApiAuth, async (req, res) => {
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: "Enter your password to delete your account." });
+    try {
+        if (!(await checkCurrentPassword(req.session.user.id, password))) {
+            return res.status(401).json({ error: "Password is incorrect" });
         }
-
-        // Destroy the session
+        await queryDB("DELETE FROM users WHERE id = ?", [req.session.user.id]);
         req.session.destroy((err) => {
-            if (err) {
-                console.error("Error destroying session:", err);
-                return res.status(500).json({ error: "Server error" });
-            }
-
+            if (err) console.error("Error destroying session:", err.message);
+            res.clearCookie("connect.sid");
             res.json({ message: "Account deleted successfully!" });
         });
-    });
+    } catch (err) {
+        console.error("Error deleting account:", err.message);
+        res.status(500).json({ error: "Database error" });
+    }
 });
 
-// ✅ Start Server
+// ---------- Errors ----------
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError || err.status === 400) {
+        return res.status(400).json({ error: err.message });
+    }
+    if (err.type === "entity.too.large") {
+        return res.status(413).json({ error: "Request too large" });
+    }
+    console.error("Unhandled error:", err);
+    res.status(500).json({ error: "Server error" });
+});
+
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

@@ -27,7 +27,7 @@
         <!-- Profile Display Section -->
         <section id="profile-display">
             <div class="profile-container">
-                <img src="/images/default-profile.jpg" alt="Profile Picture" id="profile-pic">
+                <img src="/images/default_profile_pic.jpg" alt="Profile Picture" id="profile-pic">
                 <div class="profile-text">
                     <h2 id="user-name">User Name</h2>
                     <p id="user-bio">User bio will appear here...</p>
@@ -47,20 +47,38 @@
     </footer>
 
     <script>
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        }
+
+        function safeUrl(value) {
+            const url = String(value ?? "");
+            if (url.startsWith("/uploads/")) return url;
+            try {
+                const parsed = new URL(url, window.location.origin);
+                if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+            } catch (e) { /* invalid */ }
+            return "#";
+        }
+
+        const DEFAULT_PROFILE_PIC = "/images/default_profile_pic.jpg";
+
         async function fetchUserProfile() {
             const userId = window.location.pathname.split("/").pop();
             try {
-                const response = await fetch(`/api/profile/${userId}`);
+                const response = await fetch(`/api/profile/${encodeURIComponent(userId)}`);
                 const data = await response.json();
 
                 if (data.error) {
-                    document.body.innerHTML = "<h2>User not found</h2>";
+                    document.body.textContent = "User not found";
                     return;
                 }
 
                 // Set Profile Header
                 document.getElementById("user-name").textContent = data.user.f_name;
-                document.getElementById("profile-pic").src = data.user.profile_picture || "/images/default-profile.jpg";
+                document.getElementById("profile-pic").src = data.user.profile_picture ? safeUrl(data.user.profile_picture) : DEFAULT_PROFILE_PIC;
                 document.getElementById("user-bio").textContent = data.user.bio || "No bio available.";
 
                 // Display Posts
@@ -69,8 +87,8 @@
                     ? data.posts.map(post => `
                         <div class="post">
                             <div class="post-header">
-                                <img src="${data.user.profile_picture || '/images/default-profile.jpg'}" alt="Profile" class="post-avatar">
-                                <span class="post-username">${data.user.f_name}</span>
+                                <img src="${escapeHtml(data.user.profile_picture ? safeUrl(data.user.profile_picture) : DEFAULT_PROFILE_PIC)}" alt="Profile" class="post-avatar">
+                                <span class="post-username">${escapeHtml(data.user.f_name)}</span>
                             </div>
                             <div class="post-content">
                                 ${getPostContent(post)}
@@ -85,16 +103,18 @@
         }
 
         function getPostContent(post) {
+            const content = escapeHtml(post.content);
+            const src = escapeHtml(safeUrl(post.content));
             if (post.type === "text") {
-                return `<p>${post.content}</p>`;
+                return `<p>${content}</p>`;
             } else if (post.type === "image") {
-                return `<img src="${post.content}" alt="Image" style="max-width:100%;">`;
+                return `<img src="${src}" alt="Image" style="max-width:100%;">`;
             } else if (post.type === "video") {
-                return `<video controls style="max-width:100%;"><source src="${post.content}" type="video/mp4"></video>`;
+                return `<video controls style="max-width:100%;" src="${src}"></video>`;
             } else if (post.type === "audio") {
-                return `<audio controls><source src="${post.content}" type="audio/mpeg"></audio>`;
+                return `<audio controls src="${src}"></audio>`;
             } else if (post.type === "link") {
-                return `<a href="${post.content}" target="_blank">${post.content}</a>`;
+                return `<a href="${src}" target="_blank" rel="noopener noreferrer">${content}</a>`;
             }
             return "";
         }

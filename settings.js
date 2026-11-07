@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
         })
             .then((res) => res.json())
             .then((data) => {
-                alert(data.message);
+                alert(data.message || data.error);
                 if (data.message === "Password updated successfully!") {
                     window.location.href = "/profile"; // Redirect after success
                 }
@@ -42,15 +42,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 🔹 Delete Account
     document.getElementById("delete-account-btn").addEventListener("click", () => {
+        const password = document.getElementById("delete-password").value;
+        if (!password) return alert("Please enter your password to delete your account.");
         if (!confirm("Are you sure? This action cannot be undone!")) return;
     
         fetch("/api/settings/delete-account", {
             method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password }),
         })
-            .then((res) => res.json())
-            .then((data) => {
-                alert(data.message);
-                window.location.href = "/login"; // Redirect to login page after deletion
+            .then(async (res) => ({ ok: res.ok, data: await res.json() }))
+            .then(({ ok, data }) => {
+                alert(data.message || data.error);
+                if (ok) window.location.href = "/login"; // Redirect to login page after deletion
             })
             .catch((err) => console.error("Error deleting account:", err));
     });

@@ -1,0 +1,15 @@
+# Dependencies (run `npm install`)
+node_modules/
+
+# Local secrets and settings
+.env
+.env.*
+!.env.example
+
+# User uploads (files already committed are kept; new uploads are not tracked)
+uploads/*
+!uploads/.gitkeep
+
+# OS / editor
+.DS_Store
+*.log
