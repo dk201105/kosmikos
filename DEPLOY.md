@@ -91,3 +91,26 @@ Settings (environment variables): `APP_DIR` (default `/srv/kosmikos`), `DEST`
   sudo mysql -e "SELECT COUNT(*) FROM kosmikos.users; SELECT COUNT(*) FROM kosmikos_restore_test.users"
   sudo mysql -e "DROP DATABASE kosmikos_restore_test"
   ```
+
+## 4. Hash passwords still stored as plain text
+
+Accounts created before hashing was added keep a plain-text password until
+that user next logs in. This hashes all of them now.
+
+1. Back up the users table, and make sure the column fits a hash (168 characters):
+   ```bash
+   sudo mysqldump kosmikos users > /root/users-before-hash.sql
+   sudo mysql kosmikos -e "ALTER TABLE users MODIFY password VARCHAR(255) NOT NULL"
+   ```
+2. See how many there are, then hash them (uses `.env`):
+   ```bash
+   node scripts/hash-legacy-passwords.js --dry-run
+   node scripts/hash-legacy-passwords.js
+   ```
+   It stops without changing anything if the column is too short, and is safe to run again.
+
+**Check:**
+- Running it again prints `0 with a plain-text password`.
+- `sudo mysql kosmikos -e "SELECT COUNT(*) FROM users WHERE password NOT LIKE 'scrypt\$%'"` prints `0`.
+- An existing user can still log in with their usual password.
+- Once that's confirmed, delete `/root/users-before-hash.sql` (it contains the plain-text passwords).

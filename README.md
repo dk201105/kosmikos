@@ -52,3 +52,4 @@ AJAX & Fetch API – Enables real-time content updates
 
 Passwords are stored as scrypt hashes. Accounts created before this change still
 log in with their old password, which is hashed automatically on first login.
+To hash all of them at once, run `node scripts/hash-legacy-passwords.js` (see DEPLOY.md).
