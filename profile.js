@@ -16,9 +16,6 @@ document.addEventListener("DOMContentLoaded", async function () {
             window.location.href = "/settings"; // ✅ Navigates to the settings page
         });
         
-        // Fetch followers & following count
-        await updateFollowData(user.id);
-
         // Show the correct view
         showDisplayMode();
 
@@ -72,28 +69,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         showEditMode();
     });
 
-    // Follow/Unfollow functionality
-    document.getElementById("follow-btn").addEventListener("click", async function () {
-        const followBtn = document.getElementById("follow-btn");
-        try {
-            const response = await fetch("/api/user/follow", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId: followBtn.dataset.userId })
-            });
-
-            const result = await response.json();
-            if (response.ok) {
-                followBtn.textContent = result.isFollowing ? "Unfollow" : "Follow";
-                await updateFollowData(followBtn.dataset.userId);
-            } else {
-                alert(result.error || "Error updating follow status.");
-            }
-        } catch (error) {
-            console.error("Error updating follow status:", error);
-        }
-    });
-
     // Profile Picture Preview Before Upload
     document.getElementById("profile-pic-upload").addEventListener("change", function (event) {
         const file = event.target.files[0];
@@ -105,24 +80,6 @@ document.addEventListener("DOMContentLoaded", async function () {
             reader.readAsDataURL(file);
         }
     });
-
-    // Function to update follower and following count
-    async function updateFollowData(userId) {
-        try {
-            const followResponse = await fetch(`/api/user/followers?user_id=${userId}`);
-            const followData = await followResponse.json();
-
-            document.getElementById("follower-count").innerText = followData.followers || 0;
-            document.getElementById("following-count").innerText = followData.following || 0;
-
-            const followBtn = document.getElementById("follow-btn");
-            followBtn.dataset.userId = userId;  // Store user ID in button for follow/unfollow actions
-            followBtn.textContent = followData.isFollowing ? "Unfollow" : "Follow";
-
-        } catch (error) {
-            console.error("Error fetching follow data:", error);
-        }
-    }
 
     // Function to switch to Display Mode
     function showDisplayMode() {
