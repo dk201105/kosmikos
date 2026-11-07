@@ -5,6 +5,7 @@ const fs = require("fs");
 const mysql = require("mysql2");
 const session = require("express-session");
 const multer = require("multer");
+const helmet = require("helmet");
 
 // Load settings from a local .env file if there is one (see .env.example).
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch { /* no .env file */ }
@@ -23,6 +24,34 @@ app.set("trust proxy",
     : /^\d+$/.test(TRUST_PROXY) ? Number(TRUST_PROXY)
     : TRUST_PROXY === "false" ? false
     : TRUST_PROXY);
+
+// ---------- Security headers ----------
+app.use(helmet({
+    contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],  // pages use inline <script>
+            scriptSrcAttr: ["'unsafe-inline'"],        // home.html uses onclick="..."
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:"],                // data: = profile picture preview
+            mediaSrc: ["'self'"],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            baseUri: ["'self'"],
+            formAction: ["'self'"],
+            frameAncestors: ["'none'"],
+            ...(IS_PRODUCTION ? { upgradeInsecureRequests: [] } : {}),
+        },
+    },
+    strictTransportSecurity: false,   // set by nginx, which terminates HTTPS
+    referrerPolicy: { policy: "same-origin" },
+}));
+app.use((req, res, next) => {
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+    next();
+});
 
 // ---------- Static files ----------
 // Only these folders are public. The project root (source code, .git,
@@ -46,6 +75,13 @@ app.use("/uploads", express.static(UPLOAD_DIR, {
 for (const file of ["profile.js", "settings.js"]) {
     app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
 }
+
+// Pages and API responses below may contain private data: don't let browsers
+// or proxies keep copies. (Static files above keep normal caching.)
+app.use((req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+});
 
 // ---------- Body parsing ----------
 app.use(express.urlencoded({ extended: false, limit: "100kb" }));
@@ -602,6 +638,9 @@ app.post("/api/settings/delete-account", requireApiAuth, async (req, res) => {
         res.status(500).json({ error: "Database error" });
     }
 });
+
+// ---------- 404 ----------
+app.use((req, res) => res.status(404).type("text").send("Not found"));
 
 // ---------- Errors ----------
 app.use((err, req, res, next) => {
