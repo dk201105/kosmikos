@@ -294,12 +294,27 @@ app.get("/profile", requireAuth, page("profile.html"));
 app.get("/settings", requireAuth, page("settings.html"));
 app.get("/profile/:id", requireAuth, page("user_profile.html"));
 
+// ---------- Input checks ----------
+// JSON bodies can carry objects or arrays where text is expected; these
+// helpers return null for anything that isn't the right type or size.
+const LIMITS = { name: 100, username: 100, email: 254, password: 1024, bio: 1000, post: 5000, comment: 2000, link: 2048, search: 100 };
+const text = (v, max) => (typeof v === "string" && v.length <= max ? v.trim() : null);
+const secret = (v) => (typeof v === "string" && v.length <= LIMITS.password ? v : null); // passwords: not trimmed
+const rowId = (v) => {
+    const n = typeof v === "number" ? v : (typeof v === "string" && /^\d{1,10}$/.test(v) ? Number(v) : NaN);
+    return Number.isSafeInteger(n) && n > 0 ? n : null;
+};
+
 // ---------- Signup ----------
 app.post("/", async (req, res) => {
-    const { f_name, username, email, password, confirm_password } = req.body;
+    const f_name = text(req.body.f_name, LIMITS.name);
+    const username = text(req.body.username, LIMITS.username);
+    const email = text(req.body.email, LIMITS.email);
+    const password = secret(req.body.password);
+    const confirm_password = secret(req.body.confirm_password);
 
     if (!f_name || !username || !email || !password) {
-        return alertAndRedirect(res, 400, "All fields are required!", "/");
+        return alertAndRedirect(res, 400, `All fields are required (name and username up to ${LIMITS.name} characters).`, "/");
     }
     if (password !== confirm_password) {
         return alertAndRedirect(res, 400, "Passwords do not match!", "/");
@@ -326,7 +341,8 @@ app.post("/", async (req, res) => {
 
 // ---------- Login ----------
 app.post("/login", async (req, res) => {
-    const { email, password } = req.body;
+    const email = text(req.body.email, LIMITS.email);
+    const password = secret(req.body.password);
     if (!email || !password) {
         return alertAndRedirect(res, 400, "Please enter email and password", "/login");
     }
@@ -496,12 +512,14 @@ app.get("/api/user", requireApiAuth, async (req, res) => {
 });
 
 app.post("/api/user/update", requireApiAuth, checkUploadQuota(false), upload.image.single("profile_picture"), countUpload, async (req, res) => {
-    const { f_name, bio } = req.body;
-    if (!f_name) return res.status(400).json({ error: "Name is required" });
+    const f_name = text(req.body.f_name, LIMITS.name);
+    const bio = req.body.bio === undefined ? "" : text(req.body.bio, LIMITS.bio);
+    if (!f_name) return res.status(400).json({ error: `Name is required (up to ${LIMITS.name} characters)` });
+    if (bio === null) return res.status(400).json({ error: `Bio can be up to ${LIMITS.bio} characters` });
 
     const profilePicPath = req.file ? `/uploads/${req.file.filename}` : null;
     let sql = "UPDATE users SET f_name = ?, bio = ?";
-    const params = [f_name, bio || ""];
+    const params = [f_name, bio];
     if (profilePicPath) {
         sql += ", profile_picture = ?";
         params.push(profilePicPath);
@@ -531,8 +549,8 @@ async function insertPost(req, res, type, content, okMessage, extra = {}) {
 }
 
 app.post("/post/text", requireApiAuth, (req, res) => {
-    const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
-    if (!content) return res.status(400).json({ error: "Text content is required" });
+    const content = text(req.body.content, LIMITS.post);
+    if (!content) return res.status(400).json({ error: `Text is required (up to ${LIMITS.post} characters)` });
     insertPost(req, res, "text", content, "Text post added successfully");
 });
 
@@ -545,7 +563,7 @@ for (const kind of ["image", "video", "audio"]) {
 }
 
 app.post("/post/link", requireApiAuth, (req, res) => {
-    const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+    const content = text(req.body.content, LIMITS.link) || "";
     let valid = false;
     try {
         valid = ["http:", "https:"].includes(new URL(content).protocol);
@@ -576,7 +594,7 @@ app.get("/posts", requireApiAuth, async (req, res) => {
 const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
 
 app.get("/search/users", requireApiAuth, async (req, res) => {
-    const q = typeof req.query.query === "string" ? req.query.query.trim() : "";
+    const q = text(req.query.query, LIMITS.search);
     if (!q) return res.status(400).json({ error: "Search query is required" });
     try {
         res.json(await queryDB("SELECT id, f_name, profile_picture FROM users WHERE f_name LIKE ? LIMIT 10", [likePattern(q)]));
@@ -587,7 +605,7 @@ app.get("/search/users", requireApiAuth, async (req, res) => {
 });
 
 app.get("/search/posts", requireApiAuth, async (req, res) => {
-    const q = typeof req.query.query === "string" ? req.query.query.trim() : "";
+    const q = text(req.query.query, LIMITS.search);
     if (!q) return res.status(400).json({ error: "Search query is required" });
     try {
         res.json(await queryDB(`
@@ -607,10 +625,12 @@ app.get("/search/posts", requireApiAuth, async (req, res) => {
 
 // ---------- Other users' profiles ----------
 app.get("/api/profile/:id", requireApiAuth, async (req, res) => {
+    const userId = rowId(req.params.id);
+    if (!userId) return res.status(404).json({ error: "User not found" });
     try {
-        const users = await queryDB("SELECT id, f_name, profile_picture, bio FROM users WHERE id = ?", [req.params.id]);
+        const users = await queryDB("SELECT id, f_name, profile_picture, bio FROM users WHERE id = ?", [userId]);
         if (users.length === 0) return res.status(404).json({ error: "User not found" });
-        const posts = await queryDB("SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC", [req.params.id]);
+        const posts = await queryDB("SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC", [userId]);
         res.json({ user: users[0], posts });
     } catch (err) {
         console.error("Error fetching profile:", err.message);
@@ -620,20 +640,25 @@ app.get("/api/profile/:id", requireApiAuth, async (req, res) => {
 
 // ---------- Comments ----------
 app.post("/comments", requireApiAuth, async (req, res) => {
-    const { post_id } = req.body;
-    const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
-    if (!post_id || !content) return res.status(400).json({ error: "Post ID and content are required." });
+    const post_id = rowId(req.body.post_id);
+    const content = text(req.body.content, LIMITS.comment);
+    if (!post_id || !content) {
+        return res.status(400).json({ error: `Post ID and comment (up to ${LIMITS.comment} characters) are required.` });
+    }
     try {
         const result = await queryDB("INSERT INTO comments (user_id, post_id, content) VALUES (?, ?, ?)",
             [req.session.user.id, post_id, content]);
         res.json({ message: "Comment added successfully!", comment_id: result.insertId });
     } catch (err) {
+        if (err.code === "ER_NO_REFERENCED_ROW_2") return res.status(404).json({ error: "Post not found" });
         console.error("Error adding comment:", err.message);
         res.status(500).json({ error: "Database error" });
     }
 });
 
 app.get("/comments/:post_id", requireApiAuth, async (req, res) => {
+    const postId = rowId(req.params.post_id);
+    if (!postId) return res.status(404).json({ error: "Post not found" });
     try {
         res.json(await queryDB(`
             SELECT comments.*, users.f_name AS username, users.profile_picture
@@ -641,7 +666,7 @@ app.get("/comments/:post_id", requireApiAuth, async (req, res) => {
             JOIN users ON comments.user_id = users.id
             WHERE comments.post_id = ?
             ORDER BY comments.created_at ASC
-        `, [req.params.post_id]));
+        `, [postId]));
     } catch (err) {
         console.error("Error fetching comments:", err.message);
         res.status(500).json({ error: "Database error" });
@@ -649,8 +674,10 @@ app.get("/comments/:post_id", requireApiAuth, async (req, res) => {
 });
 
 app.delete("/comments/:id", requireApiAuth, async (req, res) => {
+    const commentId = rowId(req.params.id);
+    if (!commentId) return res.status(404).json({ error: "Comment not found" });
     try {
-        const result = await queryDB("DELETE FROM comments WHERE id = ? AND user_id = ?", [req.params.id, req.session.user.id]);
+        const result = await queryDB("DELETE FROM comments WHERE id = ? AND user_id = ?", [commentId, req.session.user.id]);
         if (result.affectedRows === 0) return res.status(403).json({ error: "Unauthorized or comment not found." });
         res.json({ message: "Comment deleted successfully!" });
     } catch (err) {
@@ -667,7 +694,8 @@ async function checkCurrentPassword(userId, password) {
 }
 
 app.post("/api/settings/change-password", requireApiAuth, async (req, res) => {
-    const { current_password, new_password } = req.body;
+    const current_password = secret(req.body.current_password);
+    const new_password = secret(req.body.new_password);
     if (!current_password || !new_password) {
         return res.status(400).json({ error: "Current and new passwords are required." });
     }
@@ -689,7 +717,7 @@ app.post("/api/settings/change-password", requireApiAuth, async (req, res) => {
 });
 
 app.post("/api/settings/delete-account", requireApiAuth, async (req, res) => {
-    const { password } = req.body;
+    const password = secret(req.body.password);
     if (!password) return res.status(400).json({ error: "Enter your password to delete your account." });
     try {
         if (!(await checkCurrentPassword(req.session.user.id, password))) {
