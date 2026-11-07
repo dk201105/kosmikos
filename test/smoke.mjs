@@ -18,6 +18,7 @@ class Client {
     async req(method, path, { json, form, multipart, headers = {} } = {}) {
         const h = { ...headers };
         if (method !== "GET" && method !== "HEAD" && !("Origin" in h)) h.Origin = ORIGIN;
+        for (const k of Object.keys(h)) if (h[k] === undefined) delete h[k];
         if (this.cookies.size) h.Cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; ");
         let body;
         if (json !== undefined) { h["Content-Type"] = "application/json"; body = JSON.stringify(json); }
@@ -124,8 +125,13 @@ r = await a.req("POST", "/api/settings/change-password", { json: { current_passw
 check("change password", r.status === 200, JSON.stringify(r.data));
 
 // --- Logout / login again ---
-r = await a.req(process.env.LOGOUT_METHOD || "POST", "/logout");
-if (r.status === 404) r = await a.req("GET", "/logout");
+r = await a.req("GET", "/logout");
+check("GET /logout does not log out", r.status === 404 && (await a.req("GET", "/api/user")).status === 200, r.status);
+r = await a.req("POST", "/logout", { headers: { Origin: "https://evil.example" } });
+check("logout from another site blocked", r.status === 403, r.status);
+r = await a.req("POST", "/api/user/update", { json: { f_name: "x" }, headers: { Origin: undefined } });
+check("logged-in request without Origin blocked", r.status === 403, r.status);
+r = await a.req("POST", "/logout");
 check("logout", r.status === 302, r.status);
 r = await a.req("GET", "/api/user");
 check("logged out", r.status === 401, r.status);

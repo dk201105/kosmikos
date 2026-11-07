@@ -204,7 +204,11 @@ app.use("/uploads", (req, res, next) => {
 app.use((req, res, next) => {
     if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
     const source = req.get("origin") || req.get("referer");
-    if (!source) return next(); // non-browser clients; the SameSite cookie still applies
+    // Browsers send Origin on POST/DELETE. A logged-in request without it
+    // is refused; anonymous ones (e.g. curl signups) are still allowed.
+    if (!source) {
+        return req.session.user ? res.status(403).json({ error: "Missing Origin header" }) : next();
+    }
     let sourceHost;
     try { sourceHost = new URL(source).host; } catch { sourceHost = null; }
     if (sourceHost !== req.get("host")) {
@@ -389,7 +393,8 @@ app.post("/login", async (req, res) => {
 });
 
 // ---------- Logout ----------
-app.get("/logout", (req, res) => {
+// POST only, so another site can't log people out with <img src="/logout">.
+app.post("/logout", (req, res) => {
     req.session.destroy(() => {
         res.clearCookie(SESSION_COOKIE, { path: "/" });
         res.redirect("/login");
