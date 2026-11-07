@@ -50,6 +50,14 @@ AJAX & Fetch API – Enables real-time content updates
 3. Copy `.env.example` to `.env` and fill in your database password and a `SESSION_SECRET`.
 4. Start the server: `npm start`, then open http://localhost:5000
 
+Deploying to a server (HTTPS, database accounts, backups, permissions): see **DEPLOY.md**.
+
+## 🧪 Tests
+
+- `npm run test:unit`: password hashing (no server needed)
+- `npm test`: end-to-end check against a running server (`BASE_URL=... npm test`
+  for another address); creates and deletes a throwaway account
+
 Passwords are stored as scrypt hashes. Accounts created before this change still
 log in with their old password, which is hashed automatically on first login.
 To hash all of them at once, run `node scripts/hash-legacy-passwords.js` (see DEPLOY.md).
